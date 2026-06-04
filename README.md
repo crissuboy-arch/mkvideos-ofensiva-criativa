@@ -36,9 +36,43 @@ Comando único `/mkivideos` (use `/mkivideos help` para parâmetros):
 | `/mkivideos fila cancelar <id>` | cancela um job ainda na fila |
 | `/mkivideos help` | ajuda e parâmetros |
 
-Flags: `--vertical` (9:16), `--enviar` (anexa o .mp4), `--silencioso` (só no painel).
+Flags: `--vertical` (9:16), `--enviar` (anexa o .mp4), `--silencioso` (só no painel),
+`--pasta <caminho>` (move o .mp4 final pra essa pasta — ou caminho `.mp4` completo).
+
+## Integração com o bot host (jarvis-agnóstica)
+
+A fila não é casada com o **openpcbot** — ele é só o *host* que a gente usou.
+O mesmo sistema roda em **qualquer assistente "jarvis" sempre-ligado** (openclaw,
+hermes, claudebot, etc.) desde que o host ofereça quatro capacidades. A integração
+é um **contrato pequeno**, não um acoplamento:
+
+| O que a fila precisa do host | Como o openpcbot atende | Equivalente num outro jarvis |
+|---|---|---|
+| **Processo sempre-ligado** (escuta comandos, roda o tick da fila) | systemd user service | qualquer daemon/serviço do bot |
+| **Entrada de comando determinística** (`/mkivideos …` → enfileira) | slash command do grammy | handler de comando do bot |
+| **Store persistente da fila** | tabela `video_jobs` no SQLite | qualquer DB/arquivo (SQLite, Postgres, JSON) |
+| **Spawn de sessão Claude Code autônoma** (o "worker") | `runAgent()` (Claude Agent SDK) | `claude -p`, Agent SDK, ou API equivalente |
+| *(opcional)* enviar arquivo / painel | `sendDocument` + dashboard Hono `/videos` | qualquer envio de arquivo / web UI |
+
+### O núcleo portável
+
+Independente do host, a lógica de fila vive em peças puras e testáveis:
+
+- **`video_jobs`** — a fila (id, skill, input, opts, status, result_path, …).
+- **`parseVideoCommand`** — texto do comando → job estruturado.
+- **`buildVideoPrompt`** — job → prompt autônomo (roda a skill ponta-a-ponta,
+  render na GPU com fallback CPU, e termina com `RESULT: <caminho.mp4>`).
+- **`processNextJob`** — worker com **concorrência = 1**: pega 1 job, chama o
+  `runAgent` do host, lê o `RESULT:`, move pra `--pasta` se houver, notifica.
+- **`extractResultPath`** — captura o `.mp4` do output de forma determinística.
+
+Trocar de jarvis = reimplementar só as **bordas** (intake de comando, store,
+spawn, envio). O contrato `RESULT: <caminho.mp4>` na última linha do agente é o
+que mantém o worker desacoplado de *qual* skill ou *qual* bot está rodando.
 
 ### Backlog v2
 
-- Trava global de render (serializa até chamadas diretas das skills).
+- Trava global de render (serializa até chamadas diretas das skills) — ponto único
+  compartilhável entre hosts via um `render-gpu.sh` com lock.
 - Prioridade / job urgente; retry automático; concorrência configurável.
+- Override de pasta por host (`VIDEO_OUTPUT_DIR`) além do `--pasta` por comando.
