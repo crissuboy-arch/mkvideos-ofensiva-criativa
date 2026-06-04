@@ -1,31 +1,225 @@
 # mkivideos
 
-Agente orquestrador para criação de vídeos em fila — integra as skills
-`video-explicativo`, `videos-cursos-inema` e `video-demonstrativo` numa fila
-controlada (1 por vez), comandada por Telegram e visível num painel.
+**Motor portável de fila de vídeos** — enfileira e processa a criação de vídeos
+(skills `video-explicativo`, `videos-cursos-inema`, `video-demonstrativo`) **um por
+vez**, com notificação e painel. É **host-agnóstico** (ports & adapters): roda dentro
+de qualquer assistente "jarvis" sempre-ligado (openpcbot, openclaw, hermes, claudebot…)
+ou **standalone**, sem bot nenhum.
 
-## Como funciona
+> Por que existe: render de vídeo (HyperFrames/FFmpeg + captura de frames no Chrome)
+> satura CPU. Rodar vários ao mesmo tempo trava a máquina. Esta fila **serializa**
+> (concorrência = 1) e organiza o disparo — você comanda, ela controla o resto.
 
-O processamento NÃO roda neste repo — roda no **openpcbot** (DGX, sempre ligado).
-Este repo guarda o **design e o plano** do sistema:
+---
 
-- Spec: `docs/superpowers/specs/2026-06-03-fila-videos-openpcbot-design.md`
-- Plano: `docs/superpowers/plans/2026-06-03-fila-videos-openpcbot.md`
+## Índice
 
-### Arquitetura (v1)
+- [Como funciona (visão geral)](#como-funciona-visão-geral)
+- [Arquitetura: ports & adapters](#arquitetura-ports--adapters)
+- [Instalação](#instalação)
+- [Uso como biblioteca (dentro de um bot)](#uso-como-biblioteca-dentro-de-um-bot)
+- [Uso standalone (sem bot)](#uso-standalone-sem-bot)
+- [API](#api)
+- [O contrato `RESULT:`](#o-contrato-result)
+- [Comandos `/mkivideos` (no host Telegram)](#comandos-mkivideos-no-host-telegram)
+- [Integração de referência: openpcbot](#integração-de-referência-openpcbot)
+- [Portar para outro host](#portar-para-outro-host)
+- [Render na GPU](#render-na-gpu)
+- [Desenvolvimento](#desenvolvimento)
+- [Status e backlog](#status-e-backlog)
 
-1. **Telegram** → comando `/mkivideos explicativo <assunto>` (ou `curso`/`demo`).
-   Slash command determinístico: só insere uma linha na tabela `video_jobs`.
-2. **Fila** (`video_jobs`, SQLite do openpcbot) → FIFO, 1 job por vez.
-3. **Worker** (`video-queue.ts`) → pega o próximo job e chama `runAgent()`,
-   que spawna uma sessão Claude Code autônoma rodando a skill de ponta a ponta.
-4. **Contrato** `RESULT: <caminho.mp4>` na última linha do agente → o worker
-   captura o arquivo, marca `done` e notifica no Telegram (anexa o vídeo com `--enviar`).
-5. **Painel** → `http://localhost:3141/videos?token=...` mostra a fila em tempo real.
+---
 
-### Comandos Telegram
+## Como funciona (visão geral)
 
-Comando único `/mkivideos` (use `/mkivideos help` para parâmetros):
+```
+[Você no Telegram]  /mkivideos explicativo "Teorema de Bayes" --enviar
+        │  (o host registra o comando — determinístico, sem IA)
+        ▼
+[ QueueStore ]  ← a fila persistente (tabela video_jobs)
+        ▲
+        │  tick a cada 15s (concorrência = 1)
+[ processNextJob ]  ← o worker (deste pacote)
+        │  monta o prompt e chama runAgent()
+        ▼
+[ runAgent ]  ← o host spawna uma sessão Claude Code AUTÔNOMA, isolada,
+        │        com janela de contexto própria, que roda a skill ponta-a-ponta
+        ▼
+output do agente termina com:  RESULT: /caminho/do/video.mp4
+        │  o worker captura o caminho (determinístico)
+        ▼
+markDone → notifica no Telegram → (--enviar) anexa o .mp4 → (--pasta) move pra lá
+```
+
+Pontos-chave:
+
+- **Concorrência = 1, FIFO.** O worker só pega um job novo se nenhum estiver `running`.
+- **Cada job roda isolado.** `runAgent` spawna um subprocesso Claude Code com **contexto
+  próprio e descartável** — não polui nem acumula no contexto do bot. Um job não vaza no outro.
+- **O host não tem "janela de contexto".** É só código (fila + tick). Quem gasta contexto
+  é o subprocesso daquele job, que nasce e morre com ele.
+
+---
+
+## Arquitetura: ports & adapters
+
+O **núcleo** (parse, prompt, worker) não sabe qual bot, banco ou transporte existe.
+Ele fala com o mundo por **duas portas** que o host implementa:
+
+| Porta | O que é | Quem implementa |
+|---|---|---|
+| **`QueueStore`** | persistência da fila (enqueue, getNext, getRunning, markDone…) | o host (sobre seu DB) — ou o `SqliteQueueStore` que vem aqui |
+| **`QueueDeps`** | IO (runAgent, sendMessage, sendDocument, moveVideo) | o host (Telegram, Claude SDK, fs…) |
+
+```
+        ┌─────────────────── mkivideos (motor) ───────────────────┐
+        │  parseVideoCommand · buildVideoPrompt · extractResultPath │
+        │  formatQueueList · mkiHelpText · processNextJob · init…   │
+        └───────────────┬───────────────────────┬─────────────────┘
+                        │ usa                    │ usa
+                 ┌──────▼──────┐          ┌───────▼────────┐
+                 │ QueueStore  │          │   QueueDeps    │   ← portas (interfaces)
+                 └──────┬──────┘          └───────┬────────┘
+          implementado por                implementado por
+        ┌───────────────▼──────┐      ┌───────────▼───────────────┐
+        │ openpcbot: seu SQLite │      │ openpcbot: grammy + Claude │
+        │  (ou SqliteQueueStore)│      │  SDK + fs                  │   ← adaptadores (host)
+        └──────────────────────┘      └───────────────────────────┘
+```
+
+Trocar de host = reescrever só os **adaptadores**. O núcleo fica intacto.
+
+---
+
+## Instalação
+
+```bash
+# como dependência de um host (caminho local)
+npm install ../mkivideos          # ou: "mkivideos": "file:../mkivideos" no package.json
+
+# para hackear o próprio pacote
+git clone git@github.com:inematds/mkivideos.git && cd mkivideos
+npm install && npm run build && npm test
+```
+
+Requer Node 20+. O `SqliteQueueStore` usa `better-sqlite3` (binário nativo).
+
+---
+
+## Uso como biblioteca (dentro de um bot)
+
+```ts
+import { initVideoQueue, parseVideoCommand, formatQueueList, mkiHelpText } from 'mkivideos';
+import { SqliteQueueStore } from 'mkivideos/sqlite-store'; // ou seu próprio QueueStore
+
+const store = new SqliteQueueStore('/data/fila.db');
+
+// 1) Quando chega um comando do usuário, enfileire:
+const parsed = parseVideoCommand('explicativo Teorema de Bayes --enviar');
+if (parsed.ok) {
+  store.enqueue({
+    skill: parsed.skill, input: parsed.input,
+    opts: parsed.vertical || parsed.dest ? JSON.stringify({ vertical: parsed.vertical, dest: parsed.dest }) : null,
+    notify: parsed.silent ? 'silencioso' : 'sempre',
+    sendVideo: parsed.send, chatId: '12345',
+  });
+}
+
+// 2) Suba o worker uma vez (tick de 15s, concorrência = 1):
+store.failStaleRunning(); // limpa jobs órfãos de um restart
+const stop = initVideoQueue(store, {
+  runAgent:    (prompt) => spawnClaudeCode(prompt),          // seu spawn → { text }
+  sendMessage: (chatId, text) => telegram.send(chatId, text),
+  sendDocument:(chatId, path) => telegram.sendFile(chatId, path),
+  moveVideo:   (src, dest) => moveFile(src, dest),           // → caminho final
+});
+// stop() para o tick (shutdown gracioso)
+```
+
+---
+
+## Uso standalone (sem bot)
+
+O motor não precisa de Telegram. Com o `SqliteQueueStore` + um `runAgent` que chame o
+Claude Code em modo headless (`claude -p`), dá pra rodar a fila como um daemon/cron:
+
+```ts
+import { initVideoQueue, processNextJob } from 'mkivideos';
+import { SqliteQueueStore } from 'mkivideos/sqlite-store';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+const run = promisify(execFile);
+
+const store = new SqliteQueueStore('./fila.db');
+
+const deps = {
+  runAgent: async (prompt: string) => {
+    const { stdout } = await run('claude', ['-p', prompt], { maxBuffer: 1e8 });
+    return { text: stdout };
+  },
+  sendMessage: async (_c: string, text: string) => console.log(text),  // notifica no console
+  sendDocument: async () => {},                                        // sem anexo
+  moveVideo: async (src: string, dest: string) => { /* fs move */ return dest; },
+};
+
+store.failStaleRunning();
+initVideoQueue(store, deps);
+
+// enfileira pela CLI/script:
+store.enqueue({ skill: 'explicativo', input: 'Teorema de Bayes', opts: null, notify: 'sempre', sendVideo: false, chatId: 'cli' });
+```
+
+> Um runner standalone "baterias incluídas" (CLI `mkivideos add/fila` + notifier webhook)
+> está no [backlog](#status-e-backlog).
+
+---
+
+## API
+
+Exports principais (`import { … } from 'mkivideos'`):
+
+| Símbolo | Tipo | O que faz |
+|---|---|---|
+| `parseVideoCommand(raw)` | `ParsedCommand` | texto do comando → `{skill,input,vertical,send,silent,dest}` ou `{ok:false,error}` |
+| `buildVideoPrompt({skill,input,vertical})` | `string` | prompt autônomo (roda a skill, render GPU+fallback, emite `RESULT:`) |
+| `extractResultPath(text)` | `string\|null` | captura o `.mp4` da última linha `RESULT:` |
+| `formatQueueList(jobs)` | `string` | render da fila ativa para `/mkivideos fila` |
+| `mkiHelpText()` | `string` | texto de ajuda (HTML) |
+| `processNextJob(store, deps)` | `Promise<void>` | processa **1** job (no-op se já houver `running`) |
+| `initVideoQueue(store, deps, intervalMs?)` | `() => void` | liga o tick; retorna `stop()` |
+
+Tipos: `VideoJob`, `EnqueueInput`, `QueueStore`, `QueueDeps`, `ParsedCommand`.
+
+Store default (`import { SqliteQueueStore } from 'mkivideos/sqlite-store'`): implementa
+`QueueStore` com `better-sqlite3`. Construtor: `new SqliteQueueStore(path = ':memory:')`.
+
+### Flags de comando
+
+| Flag | Efeito |
+|---|---|
+| `--vertical` | gera 9:16 (Shorts/Reels) em vez do padrão da skill |
+| `--enviar` | anexa o `.mp4` ao terminar (`sendDocument`) |
+| `--silencioso` | não notifica; job só visível no painel |
+| `--pasta <caminho>` | move o `.mp4` final pra essa pasta (ou caminho `.mp4` completo) |
+
+---
+
+## O contrato `RESULT:`
+
+É o que mantém o worker **desacoplado da skill**. O prompt autônomo termina pedindo:
+
+- Sucesso → última linha **exatamente** `RESULT: <caminho absoluto do .mp4>`
+- Falha → última linha `ERRO: <motivo>`
+
+`extractResultPath` pega a **última** linha `RESULT:` (case-insensitive, só `\S+\.mp4`).
+Sem `RESULT:`, o worker marca o job como `failed` com o motivo do `ERRO:` (ou genérico)
+e **libera a fila** — um job que quebra nunca trava o próximo.
+
+---
+
+## Comandos `/mkivideos` (no host Telegram)
+
+Comando único com subcomandos (use `/mkivideos help` para ver tudo):
 
 | Comando | Ação |
 |---|---|
@@ -36,65 +230,89 @@ Comando único `/mkivideos` (use `/mkivideos help` para parâmetros):
 | `/mkivideos fila cancelar <id>` | cancela um job ainda na fila |
 | `/mkivideos help` | ajuda e parâmetros |
 
-Flags: `--vertical` (9:16), `--enviar` (anexa o .mp4), `--silencioso` (só no painel),
-`--pasta <caminho>` (move o .mp4 final pra essa pasta — ou caminho `.mp4` completo).
+---
 
-## Integração com o bot host (jarvis-agnóstica)
+## Integração de referência: openpcbot
 
-A fila não é casada com o **openpcbot** — ele é só o *host* que a gente usou.
-O mesmo sistema roda em **qualquer assistente "jarvis" sempre-ligado** (openclaw,
-hermes, claudebot, etc.) desde que o host ofereça quatro capacidades. A integração
-é um **contrato pequeno**, não um acoplamento:
+O [openpcbot](https://github.com/inematds/openpcbot) é o host de produção (DGX, sempre
+ligado). Ele **importa este pacote** e fornece os adaptadores:
 
-| O que a fila precisa do host | Como o openpcbot atende | Equivalente num outro jarvis |
-|---|---|---|
-| **Processo sempre-ligado** (escuta comandos, roda o tick da fila) | systemd user service | qualquer daemon/serviço do bot |
-| **Entrada de comando determinística** (`/mkivideos …` → enfileira) | slash command do grammy | handler de comando do bot |
-| **Store persistente da fila** | tabela `video_jobs` no SQLite | qualquer DB/arquivo (SQLite, Postgres, JSON) |
-| **Spawn de sessão Claude Code autônoma** (o "worker") | `runAgent()` (Claude Agent SDK) | `claude -p`, Agent SDK, ou API equivalente |
-| *(opcional)* enviar arquivo / painel | `sendDocument` + dashboard Hono `/videos` | qualquer envio de arquivo / web UI |
+- **`QueueStore`** sobre o SQLite próprio dele (a tabela `video_jobs` no mesmo banco das
+  outras features) — em vez do `SqliteQueueStore`.
+- **`QueueDeps.runAgent`** via Claude Agent SDK (`runAgent(prompt, undefined, …)` → spawna
+  a sessão Claude Code autônoma).
+- **`sendMessage`/`sendDocument`** via grammy (Telegram); **`moveVideo`** via `fs`.
+- Comando `/mkivideos` (grammy) + painel `/videos` (Hono na :3141).
 
-### O núcleo portável
+### Acoplamento: ligado no fonte, independente no runtime
 
-Independente do host, a lógica de fila vive em peças puras e testáveis:
+- O openpcbot **importa** o motor (`file:../mkivideos`) → melhora-se aqui uma vez, ele ganha.
+- **Versão fixada (pinned):** a atualização só entra quando ele roda `npm update` + rebuild — sob comando.
+- **Runtime independente:** depois do build, o bot no ar não cai se este repo mudar.
 
-- **`video_jobs`** — a fila (id, skill, input, opts, status, result_path, …).
-- **`parseVideoCommand`** — texto do comando → job estruturado.
-- **`buildVideoPrompt`** — job → prompt autônomo (roda a skill ponta-a-ponta,
-  render na GPU com fallback CPU, e termina com `RESULT: <caminho.mp4>`).
-- **`processNextJob`** — worker com **concorrência = 1**: pega 1 job, chama o
-  `runAgent` do host, lê o `RESULT:`, move pra `--pasta` se houver, notifica.
-- **`extractResultPath`** — captura o `.mp4` do output de forma determinística.
+---
 
-Trocar de jarvis = reimplementar só as **bordas** (intake de comando, store,
-spawn, envio). O contrato `RESULT: <caminho.mp4>` na última linha do agente é o
-que mantém o worker desacoplado de *qual* skill ou *qual* bot está rodando.
+## Portar para outro host
 
-## Status
+Para rodar em openclaw / hermes / claudebot / etc., implemente as duas portas:
 
-- ✅ **v1 implementado e mergeado no openpcbot** (branch `feat/fila-videos` → `main`,
-  149 testes). Roda em produção no DGX após `npm run build` + restart do serviço.
-- ⏳ **Fase 2 (pendência): extrair o motor pra este repo.** Hoje o código vive dentro
-  do openpcbot. A Fase 2 move o núcleo portável (lógica pura + contratos `QueueDeps`/
-  `QueueStore` + schema `video_jobs`) pra cá como pacote, e o openpcbot passa a
-  **importar** em vez de manter cópia inline.
+1. **`QueueStore`** — sobre o DB do host (ou use `SqliteQueueStore`).
+2. **`QueueDeps`** — `runAgent` (como o host spawna o Claude Code), `sendMessage`,
+   `sendDocument`, `moveVideo`.
+3. Registre o comando `/mkivideos` chamando `parseVideoCommand` + `store.enqueue`.
+4. Suba `initVideoQueue(store, deps)` no boot (e `store.failStaleRunning()` antes).
 
-### Decisão de acoplamento (Fase 2)
+O núcleo não muda. Você escreve só as **bordas** — tipicamente algumas dezenas de linhas.
 
-O openpcbot fica **ligado** ao mkivideos (importa o motor), mas com independência onde
-importa:
+---
 
-- **Runtime independente:** `npm run build` embute o motor no `dist/` do openpcbot — o
-  bot no ar não precisa do mkivideos presente/funcionando; não cai se o mkivideos mudar.
-- **Versão fixada (pinned):** o openpcbot trava uma versão (git tag / `npm version`);
-  melhorias no mkivideos só entram quando ele roda `npm update` + rebuild. Update sob comando.
-- **Fonte única:** melhora-se o motor uma vez aqui → todos os hosts (openpcbot, openclaw,
-  hermes…) ganham ao adotar a nova versão. Sem cópia que diverge.
+## Render na GPU
 
-### Backlog v2
+`buildVideoPrompt` instrui o agente a renderizar na GPU com fallback pro CPU:
 
-- Trava global de render (serializa até chamadas diretas das skills) — ponto único
-  compartilhável entre hosts via um `render-gpu.sh` com lock.
-- Prioridade / job urgente; retry automático; concorrência configurável.
-- Override de pasta por host (`VIDEO_OUTPUT_DIR`) além do `--pasta` por comando.
-- Runner standalone (rodar a fila sem bot: store SQLite default + `claude -p` + notifier).
+```bash
+npx hyperframes render --quality high --gpu --browser-gpu   # timeout 900
+# se o .mp4 sair vazio (GPU falhar):
+npx hyperframes render --quality high                        # fallback CPU
+```
+
+A GPU absorve TTS/rasterização/encode (NVENC); a **captura de frames continua na CPU** —
+por isso a fila (1 por vez) é o que de fato evita sobrecarga; a GPU só acelera cada job.
+Lógica de referência: `videos-explicativos/fep-videos/render-modulo.sh`.
+
+---
+
+## Desenvolvimento
+
+```bash
+npm install        # instala deps (compila better-sqlite3)
+npm run build      # tsc → dist/ (com .d.ts)
+npm test           # vitest (núcleo + store)
+npm run typecheck  # tsc --noEmit
+```
+
+Estrutura:
+
+```
+src/
+  types.ts          # VideoJob, QueueStore, QueueDeps, ParsedCommand, EnqueueInput
+  queue.ts          # parse/prompt/extract/format/help + processNextJob/initVideoQueue
+  sqlite-store.ts   # SqliteQueueStore (store default, standalone)
+  index.ts          # barrel de exports
+  *.test.ts         # vitest
+docs/superpowers/   # spec + planos de design
+```
+
+---
+
+## Status e backlog
+
+- ✅ **v1**: fila `/mkivideos` em produção no openpcbot (FIFO, 1 por vez, painel, `--pasta`,
+  recuperação de job órfão no boot).
+- ✅ **Fase 2**: motor extraído para este pacote; openpcbot importa.
+- ⏳ **Backlog**:
+  - Runner standalone "baterias incluídas" (CLI `mkivideos add/fila` + notifier webhook).
+  - Trava global de render (serializa até chamadas diretas das skills) via `render-gpu.sh` com lock.
+  - Prioridade / job urgente; retry automático; concorrência configurável.
+
+Spec e planos detalhados em [`docs/superpowers/`](docs/superpowers/).
