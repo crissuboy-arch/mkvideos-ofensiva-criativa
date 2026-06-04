@@ -341,7 +341,7 @@ export type ParsedCommand =
 /** Parse the text after "/video" (ctx.match). */
 export function parseVideoCommand(raw: string): ParsedCommand {
   const tokens = raw.trim().split(/\s+/).filter(Boolean);
-  if (tokens.length === 0) return { ok: false, error: 'Uso: /video <explicativo|curso|demo> <assunto/link> [--vertical] [--enviar] [--silencioso]' };
+  if (tokens.length === 0) return { ok: false, error: 'Uso: /mkivideos <explicativo|curso|demo> <assunto/link> [--vertical] [--enviar] [--silencioso]' };
 
   const skillToken = tokens[0].toLowerCase();
   if (skillToken !== 'explicativo' && skillToken !== 'curso' && skillToken !== 'demo') {
@@ -552,16 +552,30 @@ git commit -m "feat(video-queue): add processNextJob worker with concurrency=1 a
 
 ---
 
-## Task 4: Comandos Telegram `/video` e `/fila`
+## Task 4: Comando Telegram único `/mkivideos` (dispatcher + help)
+
+Um único comando `/mkivideos` cobre tudo via subcomandos: criar vídeo, ver fila,
+cancelar e ajuda. Sem `--`, sem comando solto: `/mkivideos help` explica os parâmetros.
+
+| Forma | Ação |
+|---|---|
+| `/mkivideos explicativo <assunto>` | enfileira vídeo explicativo |
+| `/mkivideos curso <link>` | enfileira vídeo de curso INEMA |
+| `/mkivideos demo <link do app>` | enfileira vídeo demonstrativo |
+| `/mkivideos fila` | lista a fila (running + queued) |
+| `/mkivideos fila cancelar <id>` | cancela um job ainda na fila |
+| `/mkivideos help` (ou sem args) | mostra ajuda/parâmetros |
+
+Flags no fim do enfileiramento: `--vertical`, `--enviar`, `--silencioso`.
 
 **Files:**
-- Modify: `src/video-queue.ts` (helper puro `formatQueueList`)
+- Modify: `src/video-queue.ts` (helpers puros `formatQueueList` e `mkiHelpText`)
 - Modify: `src/video-queue.test.ts`
-- Modify: `src/bot.ts` (handlers + `setMyCommands`)
+- Modify: `src/bot.ts` (handler único + `setMyCommands`)
 
-- [ ] **Step 1: Teste que falha para `formatQueueList`**
+- [ ] **Step 1: Testes que falham para `formatQueueList` e `mkiHelpText`**
 
-Adicione a `src/video-queue.test.ts` (import: `formatQueueList`):
+Adicione a `src/video-queue.test.ts` (imports: `formatQueueList`, `mkiHelpText`):
 
 ```ts
 import type { VideoJob } from './db.js';
@@ -587,19 +601,28 @@ describe('formatQueueList', () => {
     expect(formatQueueList([j({ id: 9, status: 'done' })])).toContain('vazia');
   });
 });
+
+describe('mkiHelpText', () => {
+  it('documents the 3 skills, the flags and the fila subcommand', () => {
+    const h = mkiHelpText();
+    for (const s of ['explicativo', 'curso', 'demo', '--vertical', '--enviar', '--silencioso', 'fila']) {
+      expect(h).toContain(s);
+    }
+  });
+});
 ```
 
 - [ ] **Step 2: Rodar e confirmar que falha**
 
 Run: `npx vitest run src/video-queue.test.ts`
-Expected: FAIL — `formatQueueList is not exported`.
+Expected: FAIL — `formatQueueList is not exported` / `mkiHelpText is not exported`.
 
-- [ ] **Step 3: Implementar `formatQueueList`**
+- [ ] **Step 3: Implementar `formatQueueList` e `mkiHelpText`**
 
 Adicione a `src/video-queue.ts`:
 
 ```ts
-/** Renders the active queue (running + queued) for the /fila command. */
+/** Renders the active queue (running + queued) for `/mkivideos fila`. */
 export function formatQueueList(jobs: VideoJob[]): string {
   const running = jobs.filter((j) => j.status === 'running');
   const queued = jobs.filter((j) => j.status === 'queued').sort((a, b) => a.created_at - b.created_at || a.id - b.id);
@@ -612,6 +635,30 @@ export function formatQueueList(jobs: VideoJob[]): string {
   };
   return ['📋 Fila de vídeos:', ...active.map(line)].join('\n');
 }
+
+/** Help text shown by `/mkivideos help` (and when called with no args). */
+export function mkiHelpText(): string {
+  return [
+    '🎬 <b>/mkivideos</b> — fila de vídeos (1 por vez)',
+    '',
+    '<b>Criar vídeo:</b>',
+    '  /mkivideos explicativo &lt;assunto&gt;',
+    '  /mkivideos curso &lt;link do curso&gt;',
+    '  /mkivideos demo &lt;link do app&gt;',
+    '',
+    '<b>Flags (no fim):</b>',
+    '  --vertical    gera 9:16 (Shorts/Reels) em vez do padrão',
+    '  --enviar      anexa o .mp4 no Telegram ao terminar',
+    '  --silencioso  não notifica; aparece só no painel',
+    '',
+    '<b>Fila:</b>',
+    '  /mkivideos fila               mostra a fila',
+    '  /mkivideos fila cancelar &lt;id&gt;  cancela um job que ainda espera',
+    '  /mkivideos help               esta ajuda',
+    '',
+    'Painel: http://localhost:3141/videos?token=…',
+  ].join('\n');
+}
 ```
 
 - [ ] **Step 4: Rodar e confirmar que passa**
@@ -619,48 +666,56 @@ export function formatQueueList(jobs: VideoJob[]): string {
 Run: `npx vitest run src/video-queue.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Registrar os comandos no bot**
+- [ ] **Step 5: Registrar o comando único no bot**
 
 Em `src/bot.ts`:
 
 (a) No topo, adicione aos imports de `./db.js` (ou ao bloco de import existente): `enqueueVideoJob, listJobs, cancelJob`. E importe do worker:
 
 ```ts
-import { parseVideoCommand, formatQueueList } from './video-queue.js';
+import { parseVideoCommand, formatQueueList, mkiHelpText } from './video-queue.js';
 ```
 
-(b) Em `setMyCommands([...])` (~linha 792), adicione duas entradas antes do `]`:
+(b) Em `setMyCommands([...])` (~linha 792), adicione UMA entrada antes do `]`:
 
 ```ts
-    { command: 'video', description: 'Enfileira um vídeo (explicativo|curso|demo)' },
-    { command: 'fila', description: 'Mostra a fila de vídeos' },
+    { command: 'mkivideos', description: 'Fila de vídeos — /mkivideos help' },
 ```
 
-(c) Junto aos outros `bot.command(...)` (ex: após o handler `/handoff`, ~linha 1404), adicione:
+(c) Junto aos outros `bot.command(...)` (ex: após o handler `/handoff`, ~linha 1404), adicione o handler único:
 
 ```ts
-  bot.command('video', (ctx) => {
+  bot.command('mkivideos', (ctx) => {
     if (!isAuthorised(ctx.chat!.id)) return;
-    const parsed = parseVideoCommand(ctx.match ?? '');
-    if (!parsed.ok) return ctx.reply(parsed.error);
+    const raw = (ctx.match ?? '').trim();
+    const first = (raw.split(/\s+/)[0] ?? '').toLowerCase();
+
+    // /mkivideos  | /mkivideos help | /mkivideos ajuda  → ajuda
+    if (first === '' || first === 'help' || first === 'ajuda') {
+      return ctx.reply(mkiHelpText(), { parse_mode: 'HTML' });
+    }
+
+    // /mkivideos fila [cancelar <id>]
+    if (first === 'fila') {
+      const rest = raw.slice(first.length).trim();
+      const cancelMatch = rest.match(/^cancelar\s+(\d+)$/i);
+      if (cancelMatch) {
+        const ok = cancelJob(Number(cancelMatch[1]));
+        return ctx.reply(ok ? `🗑️ Job #${cancelMatch[1]} cancelado.` : `Não consegui cancelar #${cancelMatch[1]} (já rodando ou não existe).`);
+      }
+      return ctx.reply(formatQueueList(listJobs()));
+    }
+
+    // caso contrário: enfileirar (first deve ser explicativo|curso|demo)
+    const parsed = parseVideoCommand(raw);
+    if (!parsed.ok) return ctx.reply(`${parsed.error}\n\nUse /mkivideos help.`);
     const opts = parsed.vertical ? JSON.stringify({ vertical: true }) : null;
     const id = enqueueVideoJob({
       skill: parsed.skill, input: parsed.input, opts,
       notify: parsed.silent ? 'silencioso' : 'sempre',
       sendVideo: parsed.send, chatId: ctx.chat!.id.toString(),
     });
-    return ctx.reply(`📥 Vídeo enfileirado #${id} (${parsed.skill})${parsed.send ? ' — vou te enviar o arquivo ao terminar' : ''}.`);
-  });
-
-  bot.command('fila', (ctx) => {
-    if (!isAuthorised(ctx.chat!.id)) return;
-    const arg = (ctx.match ?? '').trim();
-    const cancelMatch = arg.match(/^cancelar\s+(\d+)$/i);
-    if (cancelMatch) {
-      const ok = cancelJob(Number(cancelMatch[1]));
-      return ctx.reply(ok ? `🗑️ Job #${cancelMatch[1]} cancelado.` : `Não consegui cancelar #${cancelMatch[1]} (já rodando ou não existe).`);
-    }
-    return ctx.reply(formatQueueList(listJobs()));
+    return ctx.reply(`📥 Vídeo enfileirado #${id} (${parsed.skill})${parsed.send ? ' — te envio o arquivo ao terminar' : ''}.`);
   });
 ```
 
@@ -673,7 +728,7 @@ Expected: sem erros de tipo; testes PASS.
 
 ```bash
 git add src/bot.ts src/video-queue.ts src/video-queue.test.ts
-git commit -m "feat(video-queue): add /video and /fila Telegram commands"
+git commit -m "feat(video-queue): add unified /mkivideos command with help/fila subcommands"
 ```
 
 ---

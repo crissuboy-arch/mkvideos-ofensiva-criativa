@@ -14,7 +14,7 @@ Este repo guarda o **design e o plano** do sistema:
 
 ### Arquitetura (v1)
 
-1. **Telegram** → comando `/video explicativo <assunto>` (ou `curso`/`demo`).
+1. **Telegram** → comando `/mkivideos explicativo <assunto>` (ou `curso`/`demo`).
    Slash command determinístico: só insere uma linha na tabela `video_jobs`.
 2. **Fila** (`video_jobs`, SQLite do openpcbot) → FIFO, 1 job por vez.
 3. **Worker** (`video-queue.ts`) → pega o próximo job e chama `runAgent()`,
@@ -25,13 +25,16 @@ Este repo guarda o **design e o plano** do sistema:
 
 ### Comandos Telegram
 
+Comando único `/mkivideos` (use `/mkivideos help` para parâmetros):
+
 | Comando | Ação |
 |---|---|
-| `/video explicativo <assunto>` | enfileira vídeo explicativo |
-| `/video curso <link>` | enfileira vídeo de curso INEMA |
-| `/video demo <link do app>` | enfileira vídeo demonstrativo |
-| `/fila` | mostra a fila (running + queued) |
-| `/fila cancelar <id>` | cancela um job ainda na fila |
+| `/mkivideos explicativo <assunto>` | enfileira vídeo explicativo |
+| `/mkivideos curso <link>` | enfileira vídeo de curso INEMA |
+| `/mkivideos demo <link do app>` | enfileira vídeo demonstrativo |
+| `/mkivideos fila` | mostra a fila (running + queued) |
+| `/mkivideos fila cancelar <id>` | cancela um job ainda na fila |
+| `/mkivideos help` | ajuda e parâmetros |
 
 Flags: `--vertical` (9:16), `--enviar` (anexa o .mp4), `--silencioso` (só no painel).
 

@@ -154,13 +154,16 @@ Pontos importantes da resposta à dúvida:
 
 ### Comandos Telegram
 
+Comando único `/mkivideos` com subcomandos (sem comandos soltos separados):
+
 | Comando | Ação |
 |---|---|
-| `/video explicativo <assunto>` | enfileira job explicativo |
-| `/video curso <link>` | enfileira job de curso INEMA |
-| `/video demo <link do app>` | enfileira job demonstrativo |
-| `/fila` | lista a fila: o que roda agora + queued na ordem |
-| `/fila cancelar <id>` | cancela um job ainda `queued` (status→canceled) |
+| `/mkivideos explicativo <assunto>` | enfileira job explicativo |
+| `/mkivideos curso <link>` | enfileira job de curso INEMA |
+| `/mkivideos demo <link do app>` | enfileira job demonstrativo |
+| `/mkivideos fila` | lista a fila: o que roda agora + queued na ordem |
+| `/mkivideos fila cancelar <id>` | cancela um job ainda `queued` (status→canceled) |
+| `/mkivideos help` (ou sem args) | mostra ajuda e parâmetros |
 
 Flags opcionais no fim do comando:
 
