@@ -1,10 +1,13 @@
 {
   "name": "mkivideos",
-  "version": "0.1.0",
-  "description": "Motor portável de fila de vídeos (explicativo/curso/demo) — host-agnóstico, ports & adapters. Roda em qualquer jarvis (openpcbot, openclaw, hermes…) ou standalone.",
+  "version": "0.2.0",
+  "description": "Motor portável de fila de vídeos (explicativo/curso/demo) — host-agnóstico, ports & adapters. Roda em qualquer jarvis (openpcbot, openclaw, hermes…) ou standalone (CLI + dashboard).",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "bin": {
+    "mkivideos": "dist/cli.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -13,6 +16,10 @@
     "./sqlite-store": {
       "types": "./dist/sqlite-store.d.ts",
       "import": "./dist/sqlite-store.js"
+    },
+    "./dashboard": {
+      "types": "./dist/dashboard.d.ts",
+      "import": "./dist/dashboard.js"
     }
   },
   "files": [

@@ -19,6 +19,7 @@ ou **standalone**, sem bot nenhum.
 - [Instalação](#instalação)
 - [Uso como biblioteca (dentro de um bot)](#uso-como-biblioteca-dentro-de-um-bot)
 - [Uso standalone (sem bot)](#uso-standalone-sem-bot)
+- [Dashboard portável](#dashboard-portável)
 - [API](#api)
 - [O contrato `RESULT:`](#o-contrato-result)
 - [Comandos `/mkivideos` (no host Telegram)](#comandos-mkivideos-no-host-telegram)
@@ -142,37 +143,50 @@ const stop = initVideoQueue(store, {
 
 ## Uso standalone (sem bot)
 
-O motor não precisa de Telegram. Com o `SqliteQueueStore` + um `runAgent` que chame o
-Claude Code em modo headless (`claude -p`), dá pra rodar a fila como um daemon/cron:
+Desde a **v0.2.0** o pacote traz um **runner pronto** (`bin: mkivideos`): CLI pra enfileirar/
+consultar + um daemon que processa a fila (1 por vez) com `runAgent` via `claude -p`,
+notificação no console e dashboard opcional. Sem Telegram, sem escrever cola.
 
-```ts
-import { initVideoQueue, processNextJob } from 'mkivideos';
-import { SqliteQueueStore } from 'mkivideos/sqlite-store';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-const run = promisify(execFile);
+```bash
+# enfileirar
+mkivideos add explicativo "Teorema de Bayes" --enviar
+mkivideos add curso https://meu-curso --vertical --pasta /home/nei/videos
 
-const store = new SqliteQueueStore('./fila.db');
+# consultar / cancelar
+mkivideos fila
+mkivideos cancelar 3
 
-const deps = {
-  runAgent: async (prompt: string) => {
-    const { stdout } = await run('claude', ['-p', prompt], { maxBuffer: 1e8 });
-    return { text: stdout };
-  },
-  sendMessage: async (_c: string, text: string) => console.log(text),  // notifica no console
-  sendDocument: async () => {},                                        // sem anexo
-  moveVideo: async (src: string, dest: string) => { /* fs move */ return dest; },
-};
+# rodar o worker (daemon) — opcionalmente com dashboard web
+mkivideos run --port 3141 --token segredo
+#   → processa a fila e serve http://localhost:3141/videos?token=segredo
 
-store.failStaleRunning();
-initVideoQueue(store, deps);
-
-// enfileira pela CLI/script:
-store.enqueue({ skill: 'explicativo', input: 'Teorema de Bayes', opts: null, notify: 'sempre', sendVideo: false, chatId: 'cli' });
+# banco: ./mkivideos.db por padrão, ou defina MKIVIDEOS_DB
+MKIVIDEOS_DB=/data/fila.db mkivideos run
 ```
 
-> Um runner standalone "baterias incluídas" (CLI `mkivideos add/fila` + notifier webhook)
-> está no [backlog](#status-e-backlog).
+Pré-requisitos na máquina: `claude` CLI **logado**, as 3 skills de vídeo em `~/.claude/skills/`,
+e a stack de render (HyperFrames/FFmpeg/Chrome/TTS/GPU). Sem bin (via lib), monte os deps
+você mesmo — veja [Uso como biblioteca](#uso-como-biblioteca-dentro-de-um-bot).
+
+---
+
+## Dashboard portável
+
+Desde a **v0.2.0** o painel é parte do pacote (`mkivideos/dashboard`) — qualquer host ganha:
+
+```ts
+import { createDashboardServer, getVideoDashboardHtml } from 'mkivideos/dashboard';
+
+// (a) servidor standalone sem dependências (node:http):
+createDashboardServer(store, { port: 3141, token: 'segredo' });
+//   GET /videos · GET /api/video-jobs · POST /api/video-jobs/:id/cancel
+
+// (b) ou pegue só o HTML e plugue na sua própria rota (Hono/Express/…):
+app.get('/videos', (c) => c.html(getVideoDashboardHtml(MEU_TOKEN)));
+```
+
+Mostra os jobs (status colorido), atualiza a cada 5s, cancela os que estão na fila.
+O `mkivideos run --port` já sobe esse painel.
 
 ---
 
@@ -194,6 +208,11 @@ Tipos: `VideoJob`, `EnqueueInput`, `QueueStore`, `QueueDeps`, `ParsedCommand`.
 
 Store default (`import { SqliteQueueStore } from 'mkivideos/sqlite-store'`): implementa
 `QueueStore` com `better-sqlite3`. Construtor: `new SqliteQueueStore(path = ':memory:')`.
+
+Dashboard (`import { … } from 'mkivideos/dashboard'`): `getVideoDashboardHtml(token?)` (a
+página) e `createDashboardServer(store, {port?, token?})` (servidor HTTP sem deps).
+
+Bin (`mkivideos`): runner standalone — `add` · `fila` · `cancelar <id>` · `run [--port] [--token]`.
 
 ### Flags de comando
 
@@ -317,10 +336,13 @@ docs/superpowers/   # spec + planos de design
 
 - ✅ **v1**: fila `/mkivideos` em produção no openpcbot (FIFO, 1 por vez, painel, `--pasta`,
   recuperação de job órfão no boot).
-- ✅ **Fase 2**: motor extraído para este pacote; openpcbot importa.
+- ✅ **Fase 2** (v0.1.0): motor extraído para este pacote; openpcbot importa (git tag pinada).
+- ✅ **v0.2.0**: **runner standalone** (bin `mkivideos` add/fila/cancelar/run) + **dashboard
+  portável** (`mkivideos/dashboard`).
 - ⏳ **Backlog**:
-  - Runner standalone "baterias incluídas" (CLI `mkivideos add/fila` + notifier webhook).
+  - Notifier webhook no runner (hoje notifica no console); flags do daemon (intervalo configurável).
   - Trava global de render (serializa até chamadas diretas das skills) via `render-gpu.sh` com lock.
   - Prioridade / job urgente; retry automático; concorrência configurável.
+  - openpcbot adotar o dashboard portável (`mkivideos/dashboard`) ao subir pra v0.2.0.
 
 Spec e planos detalhados em [`docs/superpowers/`](docs/superpowers/).
