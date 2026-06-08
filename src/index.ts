@@ -13,10 +13,23 @@ export {
   initVideoQueue,
 } from './queue.js';
 
+export {
+  generateBuildIndex,
+  loadTemplate,
+  buildTTSTexts,
+  autoScenes,
+  parseTitleHint,
+} from './generator.js';
+
+export { buildVideo } from './offline-builder.js';
+
 export type {
   VideoJob,
   EnqueueInput,
   QueueStore,
   QueueDeps,
   ParsedCommand,
+  VideoRequest,
+  SceneInput,
+  BrandConfig,
 } from './types.js';

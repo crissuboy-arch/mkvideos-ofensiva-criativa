@@ -8,6 +8,7 @@ import path from 'node:path';
 
 import { parseVideoCommand, formatQueueList } from './queue.js';
 import type { QueueDeps, QueueStore } from './types.js';
+import { buildVideo } from './offline-builder.js';
 
 const run = promisify(execFile);
 
@@ -44,7 +45,30 @@ export function optVal(tokens: string[], name: string): string | undefined {
   return i >= 0 ? tokens[i + 1] : undefined;
 }
 
-/** Deps default pro modo standalone: runAgent via `claude -p`, notifica no console, move via fs. */
+/** Gera vídeo offline sem API: TTS local → HyperFrames → FFmpeg. */
+export async function cmdGerar(titulo: string, opts: {
+  vertical?: boolean;
+  pasta?: string;
+  cenas?: number;
+  tema?: string;
+}): Promise<string> {
+  if (!titulo.trim()) return 'erro: informe o título do vídeo.';
+  console.log(`[mkivideos] gerando "${titulo}"...`);
+  try {
+    const result = await buildVideo({
+      titulo: titulo.trim(),
+      tema: opts.tema,
+      n_cenas: opts.cenas,
+      vertical: opts.vertical ?? true,
+      output: opts.pasta,
+    });
+    return `✅ Vídeo gerado: ${result.mp4} (${result.duration.toFixed(1)}s)`;
+  } catch (e) {
+    return `❌ Falhou: ${(e as Error).message}`;
+  }
+}
+
+/** Deps default pro modo standalone: runAgent via `claude -p` (legado — fila). */
 export function makeDefaultDeps(): QueueDeps {
   return {
     runAgent: async (prompt) => {
@@ -67,10 +91,11 @@ export function makeDefaultDeps(): QueueDeps {
 
 export function usage(): string {
   return [
-    'mkivideos — fila de vídeos (standalone)',
+    'mkivideos — gerador de vídeos (offline)',
     '',
     'Uso:',
-    '  mkivideos add <explicativo|curso|demo> <assunto/link> [--vertical] [--enviar] [--silencioso] [--pasta <caminho>]',
+    '  mkivideos gerar "<título>" [--vertical] [--cenas <n>] [--tema <tema>] [--pasta <caminho>]',
+    '  mkivideos add <explicativo|curso|demo> <assunto> [--vertical] [--enviar] [--silencioso] [--pasta <caminho>]',
     '  mkivideos fila',
     '  mkivideos cancelar <id>',
     '  mkivideos run [--port <n>] [--token <t>]    # daemon: processa a fila (1/vez) + dashboard opcional',
@@ -78,6 +103,6 @@ export function usage(): string {
     'Env:',
     '  MKIVIDEOS_DB   caminho do banco SQLite (default: ./mkivideos.db)',
     '',
-    'Requer: `claude` CLI logado + as skills de vídeo + stack de render (HyperFrames/FFmpeg/Chrome/TTS).',
+    'Requer: HyperFrames, FFmpeg, Kokoro TTS e Chrome headless instalados localmente.',
   ].join('\n');
 }

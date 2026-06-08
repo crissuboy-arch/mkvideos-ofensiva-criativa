@@ -1,4 +1,40 @@
-.claude/
+# dependências e build
 node_modules/
 dist/
+.cache/
+
+# banco de dados local
+*.db
+*.sqlite
+mkivideos.db
+
+# arquivos de mídia gerados (não commitar)
+*.mp4
+*.wav
+*.mp3
+renders/
+
+# pastas de output
+Videos/
+
+# configuração local e segredos
+.env
+.env.*
+!.env.example
+
+# Claude Code local (não commitar — contém cache e memória local)
+.claude/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# logs
 *.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini

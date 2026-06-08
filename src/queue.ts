@@ -6,13 +6,13 @@ import type { ParsedCommand, QueueDeps, QueueStore, VideoJob } from './types.js'
 
 const SKILL_SLUGS: Record<VideoJob['skill'], string> = {
   explicativo: 'video-explicativo',
-  curso: 'videos-cursos-inema',
+  curso: 'videos-cursos',
   demo: 'video-demonstrativo',
 };
 
 const SKILL_LABEL: Record<VideoJob['skill'], string> = {
   explicativo: 'explicativo',
-  curso: 'curso INEMA',
+  curso: 'curso',
   demo: 'demonstrativo',
 };
 
@@ -54,7 +54,7 @@ export function buildVideoPrompt(job: { skill: VideoJob['skill']; input: string;
   return [
     `Use a skill \`${slug}\` para criar um vídeo a partir de: "${job.input}".`,
     formato,
-    'Rode o fluxo COMPLETO de ponta a ponta de forma AUTÔNOMA, sem pedir confirmação de frames nem qualquer interação — assuma os defaults do usuário (PT-BR, dark premium âmbar, CTA INEMA.CLUB).',
+    'Rode o fluxo COMPLETO de ponta a ponta de forma AUTÔNOMA, sem pedir confirmação de frames nem qualquer interação — assuma os defaults do usuário (PT-BR, dark premium, marca Ofensiva Criativa).',
     'No RENDER FINAL use a GPU: `npx hyperframes render --quality high --gpu --browser-gpu` com `timeout 900`. Se o .mp4 sair vazio (GPU falhar), faça fallback pro CPU: `npx hyperframes render --quality high` (sem flags de GPU).',
     'Ao terminar com sucesso, sua ÚLTIMA linha deve ser exatamente: `RESULT: <caminho absoluto do .mp4 final>`.',
     'Se falhar, sua ÚLTIMA linha deve ser: `ERRO: <motivo curto>`.',

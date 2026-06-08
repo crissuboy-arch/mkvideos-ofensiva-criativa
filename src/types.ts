@@ -62,3 +62,28 @@ export interface QueueDeps {
 export type ParsedCommand =
   | { ok: true; skill: VideoJob['skill']; input: string; vertical: boolean; send: boolean; silent: boolean; dest?: string }
   | { ok: false; error: string };
+
+// ── tipos para geração offline ────────────────────────────────────────────────
+
+export interface VideoRequest {
+  titulo: string;
+  tema?: string;
+  n_cenas?: number;
+  scenes?: SceneInput[];
+  vertical?: boolean;
+  output?: string;
+}
+
+export interface SceneInput {
+  titulo: string;
+  desc: string;
+  caption?: string;
+}
+
+export interface BrandConfig {
+  name: string;
+  tagline: string;
+  slogan: string;
+  instagram: string;
+  site: string;
+}

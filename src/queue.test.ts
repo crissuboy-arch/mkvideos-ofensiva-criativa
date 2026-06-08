@@ -75,7 +75,7 @@ describe('buildVideoPrompt', () => {
   });
 
   it('uses the right skill slug for curso and demo', () => {
-    expect(buildVideoPrompt({ skill: 'curso', input: 'http://x', vertical: false })).toContain('videos-cursos-inema');
+    expect(buildVideoPrompt({ skill: 'curso', input: 'http://x', vertical: false })).toContain('videos-cursos');
     expect(buildVideoPrompt({ skill: 'demo', input: 'http://x', vertical: false })).toContain('video-demonstrativo');
   });
 });

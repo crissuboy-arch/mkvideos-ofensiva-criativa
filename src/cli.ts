@@ -7,7 +7,7 @@ import path from 'node:path';
 import { initVideoQueue } from './queue.js';
 import { SqliteQueueStore } from './sqlite-store.js';
 import { createDashboardServer } from './dashboard.js';
-import { cmdAdd, cmdFila, cmdCancel, optVal, makeDefaultDeps, usage } from './cli-lib.js';
+import { cmdAdd, cmdFila, cmdCancel, cmdGerar, optVal, makeDefaultDeps, usage } from './cli-lib.js';
 
 const DB = process.env.MKIVIDEOS_DB || path.resolve('mkivideos.db');
 
@@ -16,6 +16,26 @@ function main(): void {
   const store = new SqliteQueueStore(DB);
 
   switch (cmd) {
+    case 'gerar': {
+      // mkivideos gerar "título aqui" [--vertical] [--cenas N] [--tema <tema>] [--pasta <dir>]
+      const flags = new Set(['--vertical', '-v', '--cenas', '--tema', '--pasta']);
+      const valuedFlags = new Set(['--cenas', '--tema', '--pasta']);
+      const tituloTokens: string[] = [];
+      for (let i = 0; i < rest.length; i++) {
+        if (flags.has(rest[i])) { if (valuedFlags.has(rest[i])) i++; continue; }
+        tituloTokens.push(rest[i]);
+      }
+      const titulo = tituloTokens.join(' ').replace(/^["']|["']$/g, '').trim();
+      const cenas = optVal(rest, '--cenas');
+      void cmdGerar(titulo, {
+        vertical: rest.includes('--vertical') || rest.includes('-v'),
+        pasta: optVal(rest, '--pasta'),
+        cenas: cenas ? parseInt(cenas) : undefined,
+        tema: optVal(rest, '--tema'),
+      }).then(msg => { console.log(msg); store.close(); });
+      return; // async — não fecha store aqui
+    }
+
     case 'add':
       console.log(cmdAdd(store, rest.join(' ')));
       break;
