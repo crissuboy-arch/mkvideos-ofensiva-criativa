@@ -51,6 +51,8 @@ export async function cmdGerar(titulo: string, opts: {
   pasta?: string;
   cenas?: number;
   tema?: string;
+  imagens?: string;
+  voz?: string;
 }): Promise<string> {
   if (!titulo.trim()) return 'erro: informe o título do vídeo.';
   console.log(`[mkivideos] gerando "${titulo}"...`);
@@ -61,6 +63,8 @@ export async function cmdGerar(titulo: string, opts: {
       n_cenas: opts.cenas,
       vertical: opts.vertical ?? true,
       output: opts.pasta,
+      imagens_dir: opts.imagens,
+      voz: opts.voz,
     });
     return `✅ Vídeo gerado: ${result.mp4} (${result.duration.toFixed(1)}s)`;
   } catch (e) {
@@ -94,7 +98,7 @@ export function usage(): string {
     'mkivideos — gerador de vídeos (offline)',
     '',
     'Uso:',
-    '  mkivideos gerar "<título>" [--vertical] [--cenas <n>] [--tema <tema>] [--pasta <caminho>]',
+    '  mkivideos gerar "<título>" [--vertical] [--cenas <n>] [--tema <tema>] [--pasta <caminho>] [--imagens <pasta>] [--voz <nome>]',
     '  mkivideos add <explicativo|curso|demo> <assunto> [--vertical] [--enviar] [--silencioso] [--pasta <caminho>]',
     '  mkivideos fila',
     '  mkivideos cancelar <id>',

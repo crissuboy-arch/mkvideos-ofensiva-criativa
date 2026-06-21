@@ -18,8 +18,8 @@ function main(): void {
   switch (cmd) {
     case 'gerar': {
       // mkivideos gerar "título aqui" [--vertical] [--cenas N] [--tema <tema>] [--pasta <dir>]
-      const flags = new Set(['--vertical', '-v', '--cenas', '--tema', '--pasta']);
-      const valuedFlags = new Set(['--cenas', '--tema', '--pasta']);
+      const flags = new Set(['--vertical', '-v', '--cenas', '--tema', '--pasta', '--imagens', '--voz']);
+      const valuedFlags = new Set(['--cenas', '--tema', '--pasta', '--imagens', '--voz']);
       const tituloTokens: string[] = [];
       for (let i = 0; i < rest.length; i++) {
         if (flags.has(rest[i])) { if (valuedFlags.has(rest[i])) i++; continue; }
@@ -32,6 +32,8 @@ function main(): void {
         pasta: optVal(rest, '--pasta'),
         cenas: cenas ? parseInt(cenas) : undefined,
         tema: optVal(rest, '--tema'),
+        imagens: optVal(rest, '--imagens'),
+        voz: optVal(rest, '--voz'),
       }).then(msg => { console.log(msg); store.close(); });
       return; // async — não fecha store aqui
     }

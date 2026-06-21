@@ -27,6 +27,7 @@ export interface SceneData {
   desc: string;      // linha de suporte (pode ser vazio)
   audio_dur: number; // duração real do WAV (ffprobe)
   caption: string;   // legenda de rodapé
+  image?: string;    // caminho relativo da imagem (ex: assets/img/cena1.png)
 }
 
 export interface GeneratorParams {
@@ -154,9 +155,10 @@ export function generateBuildIndex(p: GeneratorParams): string {
   scenes.forEach((sc, i) => {
     const transIn = transInForScene(i + 1);
     const transLine = transIn !== 'undefined' ? `\n    transIn: "${transIn}",` : '';
+    const imageLine = sc.image ? `\n    image: ${JSON.stringify(sc.image)},` : '';
     allSceneBlocks.push(`  {
     audio: ${sc.audio_dur},
-    caption: ${JSON.stringify(sc.caption)},${transLine}
+    caption: ${JSON.stringify(sc.caption)},${transLine}${imageLine}
     html: ${numberedHTML(sc.titulo, sc.desc, i, i % 2 === 1)},
     anim: ${numberedAnim(i % 2 === 0)},
   }`);
@@ -253,12 +255,16 @@ function emitScene(sc,idx){
   const s=S[idx],i=s.i,p=\`s\${i}\`;
   const at=(d)=>round(s.start+d);
   const dur=round(s.end-s.start);
-  const clip=\`#s\${i}\`,inner=\`#scene-inner-\${i}\`;
+  const clip=\`#s\${i}\`,inner=\`#scene-inner-\${i}\`,bgEl=\`#s\${i}-bg\`;
   const inType=TRANS[sc.transIn]?sc.transIn:"fade";
   const next=ALL_FINAL[idx+1];
   const outType=next&&TRANS[next.transIn]?next.transIn:"fade";
   const L=[];
-  L.push(\`tl.fromTo(\${J(inner)},{scale:1,yPercent:0},{scale:1.05,yPercent:-1.6,duration:\${dur},ease:"sine.inOut"},\${s.start});\`);
+  if(sc.image){
+    L.push(\`tl.fromTo(\${J(bgEl)},{scale:1,yPercent:0},{scale:1.08,yPercent:-2,duration:\${dur},ease:"sine.inOut"},\${s.start});\`);
+  } else {
+    L.push(\`tl.fromTo(\${J(inner)},{scale:1,yPercent:0},{scale:1.05,yPercent:-1.6,duration:\${dur},ease:"sine.inOut"},\${s.start});\`);
+  }
   for(const line of TRANS[inType].in(clip,inner,s.start,FADE)) L.push(line);
   for(const line of TRANS[outType].out(clip,inner,round(s.end-FADE),FADE)) L.push(line);
   L.push(\`tl.set(\${J(inner)},{opacity:0},\${round(s.end)});\`);
@@ -269,10 +275,13 @@ function emitScene(sc,idx){
 }
 
 // === MONTAGEM ===
-const scenesHTML=S.map((s,idx)=>\`
-    <section id="s\${s.i}" class="scene clip" data-start="\${s.start}" data-duration="\${s.dur}" data-track-index="\${s.i%2===1?1:3}">
-      <div class="scene-inner" id="scene-inner-\${s.i}" data-layout-allow-overflow>\${ALL_FINAL[idx].html(\`s\${s.i}\`)}</div>
-    </section>\`).join("");
+const scenesHTML=S.map((s,idx)=>{
+  const sc=ALL_FINAL[idx];
+  const img=sc.image||'';
+  const bg=img?'<img class="scene-bg-img" id="s'+s.i+'-bg" src="'+img+'" alt="" data-layout-ignore><div class="scene-overlay" data-layout-ignore></div>':'';
+  const cls=img?' has-img':'';
+  return '\\n    <section id="s'+s.i+'" class="scene clip" data-start="'+s.start+'" data-duration="'+s.dur+'" data-track-index="'+(s.i%2===1?1:3)+'">\\n      '+bg+'<div class="scene-inner'+cls+'" id="scene-inner-'+s.i+'" data-layout-allow-overflow>'+sc.html('s'+s.i)+'</div>\\n    </section>';
+}).join('');
 const captionsHTML=S.map((s,idx)=>\`
     <div class="caption clip" id="cap-\${s.i}" data-start="\${s.start}" data-duration="\${s.dur}" data-track-index="\${s.i%2===1?2:4}">\${ALL_FINAL[idx].caption}</div>\`).join("");
 const audioHTML=S.map((s)=>\`
@@ -293,8 +302,11 @@ const html=\`<!doctype html>
       *{margin:0;padding:0;box-sizing:border-box}
       html,body{width:\${W}px;height:\${H}px;overflow:hidden;background:var(--bg);color:var(--fg);font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
       .scene{position:absolute;inset:0;overflow:hidden}
-      .scene-inner{position:absolute;inset:-5%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:72px 60px;gap:0;will-change:transform,opacity}
+      .scene-inner{position:absolute;inset:-5%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:72px 60px;gap:0;will-change:transform,opacity;z-index:2}
       .scene-inner::before{content:"";position:absolute;inset:0;background:radial-gradient(ellipse 90% 70% at 50% 40%,rgba(201,162,39,.07) 0%,transparent 65%);pointer-events:none}
+      .scene-bg-img{position:absolute;inset:-5%;width:110%;height:110%;object-fit:cover;z-index:0;will-change:transform}
+      .scene-overlay{position:absolute;inset:0;z-index:1;pointer-events:none;background:linear-gradient(180deg,rgba(10,15,30,.58) 0%,rgba(10,15,30,.38) 45%,rgba(10,15,30,.68) 100%)}
+      .has-img::before{display:none}
       .hero-title{font-family:Sora,system-ui;font-size:${vertical ? 96 : 72}px;font-weight:800;line-height:1.08;text-align:center;color:var(--fg);letter-spacing:-2px;margin-top:20px}
       .h2{font-family:Sora,system-ui;font-size:${vertical ? 74 : 56}px;font-weight:800;line-height:1.1;text-align:center;color:var(--fg);letter-spacing:-2px;margin-top:16px}
       .eyebrow{display:flex;align-items:center;gap:10px;font-family:Inter,system-ui;font-size:${vertical ? 28 : 22}px;font-weight:600;color:var(--accent);letter-spacing:3px;text-transform:uppercase}

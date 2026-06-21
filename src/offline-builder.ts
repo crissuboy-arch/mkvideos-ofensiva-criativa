@@ -13,6 +13,8 @@ import { generateBuildIndex, loadTemplate, buildTTSTexts, autoScenes, parseTitle
 const run = promisify(execFile);
 const shell = promisify(exec);
 const __dir = path.dirname(fileURLToPath(import.meta.url));
+// No Windows, npx é um .cmd — execFile não o encontra sem extensão
+const NPX = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 
 export interface BuildRequest {
   titulo: string;
@@ -23,6 +25,8 @@ export interface BuildRequest {
   output?: string;       // caminho final do .mp4 (pasta ou arquivo)
   tts_speed?: number;    // default 1.1
   template?: string;     // nome do template JSON (default: 'video-explicativo')
+  imagens_dir?: string;  // pasta com cena1.png/jpg … cenaN.png/jpg
+  voz?: string;          // nome da voz ('cris') ou caminho absoluto para pasta de voz
 }
 
 export interface BuildResult {
@@ -44,14 +48,20 @@ async function ffprobeDuration(file: string): Promise<number> {
 async function kokoroTTS(text: string, outWav: string, speed = 1.1): Promise<void> {
   const txtFile = outWav.replace(/\.wav$/, '.txt');
   writeFileSync(txtFile, text, 'utf-8');
-  await run('python', [
-    '-m', 'kokoro', '--lang', 'p', '--voice', 'pf_dora',
-    '--speed', String(speed), '--output', outWav, txtFile,
-  ]);
+  const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+  // Usa HyperFrames TTS (mais confiável e portável que python -m kokoro direto)
+  await run(NPX, [
+    'hyperframes@0.6.80', 'tts', txtFile,
+    '--voice', 'pf_dora', '--speed', String(speed), '--output', outWav,
+  ], { maxBuffer: 50 * 1024 * 1024, shell: process.platform === 'win32' });
+  void pythonCmd; // fallback disponível se necessário
 }
 
 async function runHyperframes(cmd: string[], cwd: string): Promise<string> {
-  const { stdout, stderr } = await run('npx', ['hyperframes@0.6.80', ...cmd], { cwd, maxBuffer: 10 * 1024 * 1024 });
+  // shell:true necessário no Windows 20+ para .cmd (npx.cmd)
+  const { stdout, stderr } = await run(NPX, ['hyperframes@0.6.80', ...cmd], {
+    cwd, maxBuffer: 10 * 1024 * 1024, shell: process.platform === 'win32',
+  });
   return stdout + stderr;
 }
 
@@ -69,9 +79,10 @@ async function initProject(dir: string): Promise<void> {
   mkdirSync(dir, { recursive: true });
   await runHyperframes(['init', '.', '--example', 'blank', '--non-interactive'], dir);
 
-  // Garante assets/audio, assets/fonts
+  // Garante assets/audio, assets/fonts, assets/img
   mkdirSync(path.join(dir, 'assets', 'audio'), { recursive: true });
   mkdirSync(path.join(dir, 'assets', 'fonts'), { recursive: true });
+  mkdirSync(path.join(dir, 'assets', 'img'), { recursive: true });
   mkdirSync(path.join(dir, 'renders'), { recursive: true });
 
   // Copia GSAP local
@@ -85,18 +96,90 @@ async function initProject(dir: string): Promise<void> {
     if (existsSync(installed)) copyFileSync(installed, path.join(dir, 'assets', 'gsap.min.js'));
   }
 
-  // Copia fontes se disponíveis no skills
-  const skillFonts = path.resolve(__dir, '..', '..', '..', '.claude', 'skills', 'video-explicativo', 'assets', 'fonts');
+  // Copia fontes se disponíveis no skills (path inclui scripts/)
+  const skillFonts = path.resolve(__dir, '..', '..', '..', '.claude', 'skills', 'video-explicativo', 'scripts', 'assets', 'fonts');
   if (existsSync(skillFonts)) {
-    const files = (await shell(`ls "${skillFonts}"`)).stdout.trim().split('\n');
+    const { readdirSync } = await import('node:fs');
+    const files = readdirSync(skillFonts);
     for (const f of files) {
-      if (f) copyFileSync(path.join(skillFonts, f), path.join(dir, 'assets', 'fonts', f));
+      copyFileSync(path.join(skillFonts, f), path.join(dir, 'assets', 'fonts', f));
     }
   } else {
-    // fetch-fonts.mjs
+    // fetch-fonts.mjs como fallback
     const fetchFonts = path.resolve(__dir, '..', '..', '..', '.claude', 'skills', 'video-explicativo', 'scripts', 'fetch-fonts.mjs');
     if (existsSync(fetchFonts)) await shell(`node "${fetchFonts}"`, { cwd: dir });
   }
+}
+
+// ─── resolução de voz personalizada ─────────────────────────────────────────
+
+/** Localiza a pasta de voz a partir de nome ou caminho. */
+function resolveVozDir(voz: string): string | null {
+  if (!voz) return null;
+  // Caminho absoluto ou relativo com separador → usa diretamente
+  if (path.isAbsolute(voz) || voz.includes('/') || voz.includes('\\')) {
+    return existsSync(voz) ? voz : null;
+  }
+  // Por nome: tenta candidatos em ordem
+  const candidates = [
+    process.env.MKIVIDEOS_VOZES ? path.join(process.env.MKIVIDEOS_VOZES, voz) : null,
+    path.join(process.cwd(), 'vozes', voz),
+    path.join(process.cwd(), '..', 'vozes', voz),
+    path.join(os.homedir(), 'meus-videos-ia', 'vozes', voz),
+  ].filter(Boolean) as string[];
+  return candidates.find(existsSync) ?? null;
+}
+
+/** Clonagem de voz com Coqui XTTS v2 (requer: pip install TTS). */
+async function xttsGenerate(text: string, outWav: string, refWav: string): Promise<void> {
+  const ttsExe = process.platform === 'win32' ? 'tts.exe' : 'tts';
+  await run(ttsExe, [
+    '--text', text,
+    '--model_name', 'tts_models/multilingual/multi-dataset/xtts_v2',
+    '--speaker_wav', refWav,
+    '--language', 'pt',
+    '--out_path', outWav,
+  ], { maxBuffer: 50 * 1024 * 1024, timeout: 180000, shell: process.platform === 'win32' });
+}
+
+/**
+ * Gera áudio para uma cena com hierarquia:
+ * 1. Arquivo pré-gravado (s{i}.wav/.mp3) na pasta de voz
+ * 2. Clonagem XTTS com referencia.wav
+ * 3. Kokoro TTS (fallback)
+ */
+async function generateAudioScene(
+  sceneIdx: number,
+  text: string,
+  outWav: string,
+  vozDir: string | null,
+  speed: number,
+): Promise<number> {
+  if (vozDir) {
+    // Modo 1: arquivo pré-gravado
+    const preRecorded = ['.wav', '.mp3'].map(e => path.join(vozDir, `s${sceneIdx}${e}`)).find(existsSync);
+    if (preRecorded) {
+      console.log(`    → voz própria: s${sceneIdx}${path.extname(preRecorded)}`);
+      copyFileSync(preRecorded, outWav);
+      return ffprobeDuration(outWav);
+    }
+    // Modo 2: clonagem XTTS
+    const refFile = ['referencia.wav', 'reference.wav', 'ref.wav']
+      .map(f => path.join(vozDir, f)).find(existsSync);
+    if (refFile) {
+      try {
+        console.log(`    → XTTS clonagem (${path.basename(refFile)})`);
+        await xttsGenerate(text, outWav, refFile);
+        return ffprobeDuration(outWav);
+      } catch (e) {
+        console.warn(`    → XTTS falhou, fallback Kokoro: ${(e as Error).message.slice(0, 80)}`);
+      }
+    }
+    console.log(`    → s${sceneIdx}: sem arquivo em vozes/, usando Kokoro`);
+  }
+  // Modo 3: Kokoro
+  await kokoroTTS(text, outWav, speed);
+  return ffprobeDuration(outWav);
 }
 
 // ─── etapa 2: gera música de fundo sintética ─────────────────────────────────
@@ -109,6 +192,27 @@ async function generateBgMusic(outWav: string, durationSec: number): Promise<voi
     '-af', `afade=in:ss=0:d=3,afade=out:st=${durationSec}:d=4`,
     '-y', outWav,
   ]);
+}
+
+// ─── etapa 3: detecta e copia imagens das cenas ──────────────────────────────
+
+function copySceneImages(imagensDir: string, projectDir: string, sceneCount: number): string[] {
+  const exts = ['png', 'jpg', 'jpeg', 'webp'];
+  const result: string[] = [];
+  for (let i = 1; i <= sceneCount; i++) {
+    const found = exts.map(e => path.join(imagensDir, `cena${i}.${e}`)).find(existsSync);
+    if (found) {
+      const ext = path.extname(found);
+      const dest = path.join(projectDir, 'assets', 'img', `cena${i}${ext}`);
+      copyFileSync(found, dest);
+      result.push(`assets/img/cena${i}${ext}`);
+      console.log(`  [img] cena${i}: encontrada → ${dest}`);
+    } else {
+      result.push('');
+      console.log(`  [img] cena${i}: sem imagem, usando fundo premium automático`);
+    }
+  }
+  return result;
 }
 
 // ─── pipeline principal ───────────────────────────────────────────────────────
@@ -136,18 +240,28 @@ export async function buildVideo(req: BuildRequest): Promise<BuildResult> {
   console.log(`[mkivideos] criando projeto em ${projectDir}`);
   await initProject(projectDir);
 
-  // ── TTS ──────────────────────────────────────────────────────────────────
-  console.log('[mkivideos] gerando narração TTS...');
+  // ── resolve voz ──────────────────────────────────────────────────────────
+  const vozDir = req.voz ? resolveVozDir(req.voz) : null;
+  if (req.voz) {
+    if (vozDir) {
+      console.log(`[mkivideos] voz: ${req.voz} → ${vozDir}`);
+    } else {
+      console.warn(`[mkivideos] voz "${req.voz}" não encontrada — usando Kokoro (fallback)`);
+      console.warn(`  Dica: crie a pasta "vozes/${req.voz}/" com seus arquivos de áudio`);
+    }
+  }
+
+  // ── TTS / narração ────────────────────────────────────────────────────────
+  console.log('[mkivideos] gerando narração...');
   const ttsTexts = buildTTSTexts({ titulo, scenes, template: tpl });
   // ttsTexts = [hook, ...cenas, cta]  → índices 0..n+1  → nomeados s1..s(n+2)
   const audioDurs: number[] = [];
   for (let idx = 0; idx < ttsTexts.length; idx++) {
     const wavFile = path.join(projectDir, 'assets', 'audio', `s${idx + 1}.wav`);
-    console.log(`  [tts] s${idx + 1}: ${ttsTexts[idx].slice(0, 60)}…`);
-    await kokoroTTS(ttsTexts[idx], wavFile, speed);
-    const dur = await ffprobeDuration(wavFile);
+    console.log(`  [narr] s${idx + 1}: ${ttsTexts[idx].slice(0, 60)}…`);
+    const dur = await generateAudioScene(idx + 1, ttsTexts[idx], wavFile, vozDir, speed);
     audioDurs.push(dur);
-    console.log(`  [dur] s${idx + 1}: ${dur.toFixed(2)}s`);
+    console.log(`  [dur]  s${idx + 1}: ${dur.toFixed(2)}s`);
   }
 
   const hookAudioDur = audioDurs[0];
@@ -160,6 +274,18 @@ export async function buildVideo(req: BuildRequest): Promise<BuildResult> {
   console.log('[mkivideos] gerando música de fundo...');
   await generateBgMusic(bgMusicPath, totalRough);
 
+  // ── resolve imagens das cenas ───────────────────────────────────────────
+  let sceneImages: string[] = [];
+  if (req.imagens_dir) {
+    const absDir = path.resolve(req.imagens_dir);
+    if (existsSync(absDir)) {
+      console.log(`[mkivideos] copiando imagens de ${absDir}...`);
+      sceneImages = copySceneImages(absDir, projectDir, scenes.length);
+    } else {
+      console.warn(`[mkivideos] pasta de imagens não encontrada: ${absDir}`);
+    }
+  }
+
   // ── gera build-index.mjs ────────────────────────────────────────────────
   console.log('[mkivideos] gerando composição HTML...');
   const sceneData = scenes.map((sc, i) => ({
@@ -167,6 +293,7 @@ export async function buildVideo(req: BuildRequest): Promise<BuildResult> {
     desc: sc.desc,
     audio_dur: contentAudioDurs[i] ?? 5,
     caption: sc.caption,
+    image: sceneImages[i] || undefined,
   }));
 
   const buildJS = generateBuildIndex({

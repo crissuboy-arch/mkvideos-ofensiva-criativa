@@ -88,25 +88,72 @@ mkivideos gerar "Título do vídeo" --vertical --cenas 5 --pasta C:\Videos\Rende
 | `--cenas <n>` | 5 | número de cenas de conteúdo (+ hook + CTA = n+2 total) |
 | `--tema <texto>` | — | dica extra para o gerador de cenas |
 | `--pasta <caminho>` | `./renders/` | pasta de destino do MP4 final |
+| `--imagens <pasta>` | — | pasta com `cena1.png`…`cenaN.png` para fundos das cenas |
+| `--voz <nome>` | — | voz personalizada (ex: `cris`); fallback Kokoro se não encontrar |
 
 ---
 
 ## Onde colocar imagens próprias
 
-> Funcionalidade planejada (não implementada ainda).
+Crie imagens com os nomes `cena1.png`, `cena2.png`… e coloque em qualquer pasta.
+Passe o caminho com `--imagens`:
 
-Quando implementado, as imagens ficam em `assets/img/` dentro do projeto gerado.
-Hoje as cenas usam gradientes e tipografia (sem imagens externas).
+```bash
+mkivideos gerar "Título" --imagens "C:\Users\Evand\meus-videos-ia\assets\imagens"
+```
+
+Formatos aceitos: `.png`, `.jpg`, `.jpeg`, `.webp`.
+Cenas sem imagem usam o fundo premium automático da Ofensiva Criativa.
 
 ---
 
 ## Onde colocar sua voz
 
-> Funcionalidade planejada (não implementada ainda).
+A pasta de vozes fica em:
+```
+C:\Users\Evand\meus-videos-ia\vozes\cris\
+```
 
-Quando implementado, grave os WAVs com os mesmos nomes (`s1.wav`, `s2.wav`…)
-e coloque em `assets/audio/` — o pipeline pula a etapa de TTS automaticamente
-se os arquivos já existirem.
+### Modo 1 — Arquivos pré-gravados (melhor qualidade)
+
+Grave você mesma cada cena e salve como `s1.wav`, `s2.wav`… na pasta da voz.
+
+| Arquivo | Cena |
+|---------|------|
+| `s1.wav` | Hook (abertura) |
+| `s2.wav` | Cena 1 de conteúdo |
+| `s3.wav` … | Cenas seguintes |
+| `sN.wav` | CTA final |
+
+Arquivos faltando → sistema usa Kokoro TTS para aquela cena.
+
+### Modo 2 — Clonagem automática com XTTS v2
+
+Coloque um único arquivo `referencia.wav` (10–30 segundos, voz natural, ambiente silencioso).
+O sistema gera toda a narração clonando sua voz automaticamente.
+
+Requer instalação:
+```bash
+pip install TTS
+```
+
+### Formato recomendado
+- **WAV**, 44100 Hz, mono ou estéreo
+- Ambiente silencioso (sem eco, sem barulho)
+- Fale no mesmo tom e ritmo que quer nos vídeos
+
+### Como testar a voz
+
+```bash
+# Gera vídeo usando voz Cris (com fallback automático)
+mkivideos gerar "5 formas de ganhar dinheiro com IA" --voz cris
+
+# Combinando voz + imagens
+mkivideos gerar "Título" --voz cris --imagens "C:\caminho\imagens" --pasta "C:\Videos\Renderizados"
+```
+
+Se os arquivos `s1.wav`…`sN.wav` não existirem, o sistema avisa quais estão faltando
+e usa Kokoro como placeholder — você pode gravar e rodar de novo depois.
 
 ---
 
