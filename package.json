@@ -37,7 +37,8 @@
     "prepare": "tsc"
   },
   "dependencies": {
-    "better-sqlite3": "^11.8.1"
+    "better-sqlite3": "^11.8.1",
+    "gsap": "^3.15.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",

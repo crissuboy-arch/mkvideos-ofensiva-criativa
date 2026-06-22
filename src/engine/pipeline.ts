@@ -143,13 +143,22 @@ export async function buildVideo(req: BuildRequest, hooks: BuildHooks = {}): Pro
   const outSlug = slug + (vertical ? '-9x16' : '-16x9');
   const renderOut = path.join(projectDir, 'renders', `${outSlug}.mp4`);
   emit('render');
-  console.log('[mkivideos] render...');
+  // GPU é opt-in (MKIVIDEOS_GPU=1): não acelera este pipeline e já travou em máquina
+  // sem GPU dedicada. Timeout evita render pendurado pra sempre (default 20 min).
+  const useGpu = process.env.MKIVIDEOS_GPU === '1';
+  const renderTimeoutMs = Number(process.env.MKIVIDEOS_RENDER_TIMEOUT_MS) || 20 * 60_000;
+  console.log(`[mkivideos] render (${useGpu ? 'gpu' : 'cpu'}, timeout ${Math.round(renderTimeoutMs / 60000)}min)...`);
   try {
-    await hfRender(projectDir, renderOut, { gpu: true });
-    if (!existsSync(renderOut) || (await ffprobeDuration(renderOut)) < 1) throw new Error('GPU render vazio');
-  } catch {
-    console.log('[mkivideos] fallback CPU render...');
-    await hfRender(projectDir, renderOut, { gpu: false });
+    await hfRender(projectDir, renderOut, { gpu: useGpu, timeoutMs: renderTimeoutMs });
+    if (!existsSync(renderOut) || (await ffprobeDuration(renderOut)) < 1) throw new Error('render vazio/curto');
+  } catch (e) {
+    if (useGpu) {
+      console.log('[mkivideos] render GPU falhou/timeout — fallback CPU...');
+      await hfRender(projectDir, renderOut, { gpu: false, timeoutMs: renderTimeoutMs });
+      if (!existsSync(renderOut) || (await ffprobeDuration(renderOut)) < 1) throw new Error('render CPU vazio/curto');
+    } else {
+      throw new Error(`render falhou: ${(e as Error).message}`);
+    }
   }
 
   const duration = await ffprobeDuration(renderOut);
