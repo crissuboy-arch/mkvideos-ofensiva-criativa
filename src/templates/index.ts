@@ -1,15 +1,19 @@
-// Registro dos 7 templates de tipo de vídeo.
+// Registro dos templates de tipo de vídeo (14 — 7 originais + 7 nichos).
 
 import { explicativo, curso, tutorial } from './informative.js';
-import { vendas, anuncio } from './persuasive.js';
-import { storytelling, motivacional } from './narrative.js';
+import { vendas, anuncio, produtoDigital } from './persuasive.js';
+import { storytelling, motivacional, novelaCurta } from './narrative.js';
+import { tiktokViral, curiosidades, autoridade } from './viral.js';
+import { bonequinhas3d, historiasInfantis } from './kids.js';
 import type { VideoTemplate } from './types.js';
 import type { VideoType } from '../specs/types.js';
 
 export type { VideoTemplate, BuildCtx, BuildResult, HookSpec } from './types.js';
 
 const ALL: VideoTemplate[] = [
-  explicativo, vendas, curso, storytelling, tutorial, anuncio, motivacional,
+  tiktokViral, curiosidades, storytelling, novelaCurta, motivacional,
+  autoridade, vendas, produtoDigital, anuncio, explicativo,
+  curso, tutorial, bonequinhas3d, historiasInfantis,
 ];
 
 export const TEMPLATES: Record<VideoType, VideoTemplate> = Object.fromEntries(

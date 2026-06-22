@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { generateScript, narrationTexts } from './script-generator.js';
 import { VIDEO_TYPES } from './types.js';
+import { getTemplate, listTemplates } from '../templates/index.js';
 
 describe('generateScript', () => {
-  it('gera roteiro para todos os 7 tipos com hook + cta', () => {
+  it('gera roteiro para todos os tipos com hook + cta', () => {
     for (const tipo of VIDEO_TYPES) {
       const s = generateScript({ titulo: '5 formas de crescer no Instagram', tipo });
       expect(s.scenes.length).toBeGreaterThanOrEqual(4);
@@ -61,5 +62,38 @@ describe('generateScript', () => {
   it('narrationTexts retorna uma fala por cena, em ordem', () => {
     const s = generateScript({ titulo: 'X', tipo: 'vendas' });
     expect(narrationTexts(s)).toEqual(s.scenes.map((x) => x.narration));
+  });
+});
+
+describe('qualidade do roteiro (Fase 11)', () => {
+  it('os 14 tipos têm template próprio', () => {
+    expect(VIDEO_TYPES).toHaveLength(14);
+    expect(listTemplates()).toHaveLength(14);
+    for (const tipo of VIDEO_TYPES) expect(getTemplate(tipo).tipo).toBe(tipo);
+  });
+
+  it('o gancho NÃO é o título repetido literalmente', () => {
+    const titulo = '5 formas de ganhar dinheiro com IA';
+    for (const tipo of VIDEO_TYPES) {
+      const hook = generateScript({ titulo, tipo }).scenes[0].narration;
+      expect(hook.startsWith(titulo)).toBe(false);   // não abre repetindo o título
+      expect(hook.length).toBeGreaterThan(20);        // tem substância
+      expect(hook).not.toBe(titulo);
+    }
+  });
+
+  it('não repete o tema literal mais de 2x no roteiro inteiro', () => {
+    const subject = 'ganhar dinheiro com IA';
+    for (const tipo of VIDEO_TYPES) {
+      const all = generateScript({ titulo: `5 formas de ${subject}`, tipo })
+        .scenes.map((s) => s.narration).join(' ');
+      const count = all.split(subject).length - 1;
+      expect(count, `tipo ${tipo} repetiu o tema ${count}x`).toBeLessThanOrEqual(2);
+    }
+  });
+
+  it('a CTA tem uma ponte natural antes da assinatura da marca', () => {
+    const cta = generateScript({ titulo: 'X', tipo: 'tiktok-viral' }).scenes.at(-1)!;
+    expect(cta.narration.toLowerCase()).toMatch(/segue|salva|comenta|marca|link|manda/);
   });
 });

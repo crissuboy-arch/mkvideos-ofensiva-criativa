@@ -1,7 +1,7 @@
 {
   "name": "mkivideos",
-  "version": "0.4.0",
-  "description": "Motor universal de vídeos (offline): 7 tipos, 15 cenas, 7 marcas, 9:16/16:9, sync por áudio real — + Centro de Operações de Conteúdo (calendário, agendamento, contas, worker de publicação mock, lotes, logs). CLI + fila host-agnóstica.",
+  "version": "0.5.0",
+  "description": "Motor universal de vídeos (offline): 14 tipos/nichos com roteiros de alta retenção, 15 cenas, 7 marcas, 9:16/16:9, sync por áudio real — + Centro de Operações de Conteúdo (calendário, agendamento, contas, worker de publicação mock, lotes, logs). CLI + fila host-agnóstica.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

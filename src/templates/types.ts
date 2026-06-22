@@ -24,6 +24,7 @@ export interface BuildResult {
   promise: string;        // promessa do vídeo (usada no roteiro)
   hook: HookSpec;         // cena de abertura
   content: SceneSpec[];   // cenas de conteúdo (sem hook/cta)
+  ctaBridge?: string;     // ponte natural falada antes da assinatura da marca
 }
 
 export interface VideoTemplate {
