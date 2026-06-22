@@ -8,8 +8,9 @@ import { initVideoQueue } from './queue.js';
 import { SqliteQueueStore } from './sqlite-store.js';
 import { createDashboardServer } from './dashboard.js';
 import { cmdAdd, cmdFila, cmdCancel, cmdGerar, optVal, makeDefaultDeps, usage } from './cli-lib.js';
-import { SqliteContentStore } from './content/store.js';
+import { SqliteContentStore, DEFAULT_ACCOUNTS } from './content/store.js';
 import { createPanelServer } from './content/panel.js';
+import { startScheduler } from './content/scheduler.js';
 import { platformFormat } from './content/types.js';
 import { buildVideo } from './engine/pipeline.js';
 
@@ -65,6 +66,8 @@ function main(): void {
       const port = Number(optVal(rest, '--port') || 3142);
       const token = optVal(rest, '--token');
       const content = new SqliteContentStore(DB);
+      const seeded = content.seedAccounts(DEFAULT_ACCOUNTS);
+      if (seeded) console.log(`(criei ${seeded} contas-exemplo)`);
       createPanelServer(content, {
         port, token,
         generate: async (item, { onPhase }) => {
@@ -79,8 +82,11 @@ function main(): void {
           return r.mp4;
         },
       });
+      const sched = startScheduler(content, { intervalMs: 60_000 });
+      void sched; // worker publica os agendados vencidos (mock) a cada minuto
       console.log(`painel: http://localhost:${port}/painel${token ? `?token=${token}` : ''} (DB: ${DB})`);
-      return; // o server segura o processo vivo
+      console.log('worker de publicação: ativo (1/min, mocks)');
+      return; // o server + worker seguram o processo vivo
     }
 
     case 'run': {

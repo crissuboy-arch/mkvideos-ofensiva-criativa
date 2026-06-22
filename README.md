@@ -128,26 +128,29 @@ mkivideos gerar "Lançamento do app" --tipo anuncio --marca produto --vertical
 
 ---
 
-## Painel de Produção de Conteúdo
+## Centro de Operações de Conteúdo
 
-Centro de controle operacional (uso interno): planejar, cadastrar, acompanhar status e disparar a geração.
-**Ainda não publica** — é o controle; agendamento/publicação automática vêm depois.
+Painel operacional interno: planejar, cadastrar, gerar, **agendar** e **publicar** (worker + publishers mock).
 
 ```bash
 mkivideos painel --port 3142 [--token minha-senha]
-# abre http://localhost:3142/painel
+# abre http://localhost:3142/painel  (+ worker de publicação a cada minuto)
 ```
 
-- **Dashboard:** pendentes · prontos · publicados · desta semana.
-- **Cadastro:** tema, tipo de vídeo, plataforma, idioma, produto, data e hora de publicação, marca.
-- **Status (pipeline editorial):** ideia → roteiro → gerando → renderizando → pronto → publicado.
-- **Filtros:** plataforma (TikTok/Instagram/YouTube/Facebook), idioma (PT/ES/EN), status.
-- **Calendário:** itens agrupados por data de publicação.
-- **Botão "Gerar Vídeo":** chama o motor (`buildVideo`) — formato pelo da plataforma (YouTube→16:9, resto→9:16); o status acompanha as fases (gerando → renderizando → pronto, com o caminho do `.mp4`). Uma geração por vez.
+- **Dashboard + métricas:** pendentes · prontos · agendados · publicados · esta semana; criados e total por plataforma.
+- **Biblioteca:** cadastro (tema, tipo, plataforma, idioma, **conta**, produto, data/hora, timezone, marca) e filtros (plataforma, idioma, **produto**, tipo, status).
+- **Status:** ideia → roteiro → gerando → renderizando → pronto → **agendado** → publicado.
+- **Calendário:** **Hoje / Semana / Mês** (grade mensal com nº de vídeos por dia).
+- **Contas:** tabela `accounts` (TikTok PT, TikTok ES, Instagram PT/ES, YouTube Shorts PT/ES, …) — criar, ativar/desativar, excluir; cada conteúdo escolhe a conta destino.
+- **Gerar Vídeo:** chama `buildVideo` (formato pela plataforma); status acompanha as fases.
+- **Agendar:** item `pronto` com data → `agendado`. O **worker** (1/min) publica os agendados vencidos via `publishers/` (TikTok/Instagram/YouTube/Facebook — **mocks**, sem API real) e marca `publicado`.
+- **Lotes:** "duplicar" um item em até ~30 cópias variando só **tema | idioma | data**.
+- **Logs:** geração, renderização, agendamento, publicação (e erros) — tudo em banco.
 
-> O idioma hoje é metadado de organização (a narração roda em PT-BR). Multilíngue real é evolução futura.
+> **Sem publicação real ainda:** os `publishers/` são mocks; a arquitetura já está pronta para as APIs.
+> O idioma é metadado de organização (a narração roda em PT-BR). Multilíngue é evolução futura.
 
-Programático: `import { SqliteContentStore, createPanelServer } from 'mkivideos/content'`.
+Programático: `import { SqliteContentStore, createPanelServer, startScheduler, getPublisher } from 'mkivideos/content'`.
 
 ---
 
@@ -176,7 +179,8 @@ engine/     timing (sync por áudio), motion (M.* + transições), pipeline (orq
 audio/      TTS (Kokoro/XTTS/pré-gravado), ffprobe, música de fundo
 render/     wrappers HyperFrames + setup do projeto (gsap/fontes/imagens)
 composer.ts spec resolvido → index.html final
-content/    painel de produção: store SQLite + servidor HTTP + HTML (calendário/cadastro/dashboard)
+content/    centro de operações: store SQLite (conteúdo/contas/logs) + painel HTTP + scheduler (worker)
+publishers/ adapters de publicação por plataforma (tiktok/instagram/youtube/facebook — mocks)
 cli.ts / cli-lib.ts   comandos `gerar` + `painel` + fila
 queue.ts / sqlite-store.ts / dashboard.ts   fila host-agnóstica (ports & adapters)
 ```
@@ -189,7 +193,7 @@ Fluxo do `gerar`: **tema → roteiro (specs) → TTS (audio) → composição (c
 
 ```bash
 npm run build      # tsc → dist/
-npm test           # vitest (81 testes)
+npm test           # vitest (96 testes)
 npm run typecheck  # checagem de tipos sem build
 ```
 

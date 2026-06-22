@@ -55,4 +55,9 @@ export {
 } from './content/types.js';
 export type {
   Platform, Language, ContentStatus, ContentItem, ContentInput, DashboardCounts,
+  Metrics, Account, AccountInput, LogEntry, LogEvent, BatchVariation,
 } from './content/types.js';
+
+// ── publishers (mocks; sem better-sqlite3) ──────────────────────────────────
+export { getPublisher, PUBLISHERS } from './publishers/index.js';
+export type { Publisher, PublishContext, PublishResult } from './publishers/index.js';
