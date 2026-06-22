@@ -47,4 +47,12 @@ export type {
 } from './specs/types.js';
 
 export type { Brand, Palette, Fonts } from './brands/index.js';
-export type { BuildRequest, BuildResult } from './engine/pipeline.js';
+export type { BuildRequest, BuildResult, BuildPhase, BuildHooks } from './engine/pipeline.js';
+
+// ── painel de conteúdo (tipos/consts; store+server via 'mkivideos/content') ─
+export {
+  PLATFORMS, LANGUAGES, CONTENT_STATUSES, platformFormat,
+} from './content/types.js';
+export type {
+  Platform, Language, ContentStatus, ContentItem, ContentInput, DashboardCounts,
+} from './content/types.js';

@@ -128,6 +128,29 @@ mkivideos gerar "Lançamento do app" --tipo anuncio --marca produto --vertical
 
 ---
 
+## Painel de Produção de Conteúdo
+
+Centro de controle operacional (uso interno): planejar, cadastrar, acompanhar status e disparar a geração.
+**Ainda não publica** — é o controle; agendamento/publicação automática vêm depois.
+
+```bash
+mkivideos painel --port 3142 [--token minha-senha]
+# abre http://localhost:3142/painel
+```
+
+- **Dashboard:** pendentes · prontos · publicados · desta semana.
+- **Cadastro:** tema, tipo de vídeo, plataforma, idioma, produto, data e hora de publicação, marca.
+- **Status (pipeline editorial):** ideia → roteiro → gerando → renderizando → pronto → publicado.
+- **Filtros:** plataforma (TikTok/Instagram/YouTube/Facebook), idioma (PT/ES/EN), status.
+- **Calendário:** itens agrupados por data de publicação.
+- **Botão "Gerar Vídeo":** chama o motor (`buildVideo`) — formato pelo da plataforma (YouTube→16:9, resto→9:16); o status acompanha as fases (gerando → renderizando → pronto, com o caminho do `.mp4`). Uma geração por vez.
+
+> O idioma hoje é metadado de organização (a narração roda em PT-BR). Multilíngue real é evolução futura.
+
+Programático: `import { SqliteContentStore, createPanelServer } from 'mkivideos/content'`.
+
+---
+
 ## Modo fila (online, requer Claude logado)
 
 Independente do `gerar` offline: a fila usa `claude -p` para rodar skills de vídeo (explicativo/curso/demo) com agente autônomo.
@@ -153,7 +176,8 @@ engine/     timing (sync por áudio), motion (M.* + transições), pipeline (orq
 audio/      TTS (Kokoro/XTTS/pré-gravado), ffprobe, música de fundo
 render/     wrappers HyperFrames + setup do projeto (gsap/fontes/imagens)
 composer.ts spec resolvido → index.html final
-cli.ts / cli-lib.ts   comando `gerar` + fila
+content/    painel de produção: store SQLite + servidor HTTP + HTML (calendário/cadastro/dashboard)
+cli.ts / cli-lib.ts   comandos `gerar` + `painel` + fila
 queue.ts / sqlite-store.ts / dashboard.ts   fila host-agnóstica (ports & adapters)
 ```
 

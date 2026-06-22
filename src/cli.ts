@@ -8,6 +8,10 @@ import { initVideoQueue } from './queue.js';
 import { SqliteQueueStore } from './sqlite-store.js';
 import { createDashboardServer } from './dashboard.js';
 import { cmdAdd, cmdFila, cmdCancel, cmdGerar, optVal, makeDefaultDeps, usage } from './cli-lib.js';
+import { SqliteContentStore } from './content/store.js';
+import { createPanelServer } from './content/panel.js';
+import { platformFormat } from './content/types.js';
+import { buildVideo } from './engine/pipeline.js';
 
 const DB = process.env.MKIVIDEOS_DB || path.resolve('mkivideos.db');
 
@@ -55,6 +59,29 @@ function main(): void {
     case 'cancel':
       console.log(cmdCancel(store, Number(rest[0])));
       break;
+
+    case 'painel': {
+      store.close(); // a fila não é usada no painel
+      const port = Number(optVal(rest, '--port') || 3142);
+      const token = optVal(rest, '--token');
+      const content = new SqliteContentStore(DB);
+      createPanelServer(content, {
+        port, token,
+        generate: async (item, { onPhase }) => {
+          const fmt = platformFormat(item.plataforma);
+          const r = await buildVideo({
+            titulo: item.tema,
+            tipo: item.tipo,
+            marca: item.marca ?? undefined,
+            vertical: fmt === 'vertical',
+            horizontal: fmt === 'horizontal',
+          }, { onProgress: (ph) => onPhase(ph === 'render' || ph === 'movendo' ? 'renderizando' : 'gerando') });
+          return r.mp4;
+        },
+      });
+      console.log(`painel: http://localhost:${port}/painel${token ? `?token=${token}` : ''} (DB: ${DB})`);
+      return; // o server segura o processo vivo
+    }
 
     case 'run': {
       const swept = store.failStaleRunning();

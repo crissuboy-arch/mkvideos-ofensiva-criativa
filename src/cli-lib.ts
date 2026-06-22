@@ -124,6 +124,7 @@ export function usage(): string {
     '  mkivideos fila',
     '  mkivideos cancelar <id>',
     '  mkivideos run [--port <n>] [--token <t>]    # daemon: processa a fila (1/vez) + dashboard opcional',
+    '  mkivideos painel [--port <n>] [--token <t>] # painel de produção (calendário, cadastro, dashboard)',
     '',
     `  tipos:  ${VIDEO_TYPES.join(', ')}`,
     `  marcas: ${brandIds().join(', ')}`,

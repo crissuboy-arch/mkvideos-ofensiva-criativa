@@ -38,10 +38,18 @@ export interface BuildResult {
   format: 'vertical' | 'horizontal';
 }
 
+/** Fases emitidas durante o build (para painéis/UX acompanharem o progresso). */
+export type BuildPhase = 'roteiro' | 'narracao' | 'musica' | 'composicao' | 'render' | 'movendo';
+
+export interface BuildHooks {
+  onProgress?: (phase: BuildPhase) => void;
+}
+
 const MUSIC_REL = 'assets/audio/music-bg.wav';
 const MUSIC_VOL = 0.1;
 
-export async function buildVideo(req: BuildRequest): Promise<BuildResult> {
+export async function buildVideo(req: BuildRequest, hooks: BuildHooks = {}): Promise<BuildResult> {
+  const emit = (p: BuildPhase): void => { try { hooks.onProgress?.(p); } catch { /* ignore */ } };
   const speed = req.tts_speed ?? 1.1;
 
   // ── 1. roteiro (offline) ───────────────────────────────────────────────────
@@ -57,6 +65,7 @@ export async function buildVideo(req: BuildRequest): Promise<BuildResult> {
   });
   const brand = getBrand(script.brand);
   const vertical = script.format === 'vertical';
+  emit('roteiro');
   console.log(`[mkivideos] "${req.titulo}" · ${script.tipo} · ${script.format} · marca ${brand.id} · ${script.scenes.length} cenas`);
 
   // ── 2. projeto temporário ──────────────────────────────────────────────────
@@ -74,6 +83,7 @@ export async function buildVideo(req: BuildRequest): Promise<BuildResult> {
   }
 
   // ── 4. narração (TTS) + duração real por cena ─────────────────────────────
+  emit('narracao');
   console.log('[mkivideos] gerando narração...');
   for (let i = 0; i < script.scenes.length; i++) {
     const sc = script.scenes[i];
@@ -85,6 +95,7 @@ export async function buildVideo(req: BuildRequest): Promise<BuildResult> {
 
   // ── 5. música de fundo ─────────────────────────────────────────────────────
   const totalRough = script.scenes.reduce((a, s) => a + (s.audio_dur ?? 0) + 0.8, 0) + 2;
+  emit('musica');
   console.log('[mkivideos] gerando música de fundo...');
   await generateBgMusic(path.join(projectDir, 'assets', 'audio', 'music-bg.wav'), totalRough);
 
@@ -102,6 +113,7 @@ export async function buildVideo(req: BuildRequest): Promise<BuildResult> {
   }
 
   // ── 7. composição → index.html ─────────────────────────────────────────────
+  emit('composicao');
   console.log('[mkivideos] compondo index.html...');
   const { html, total } = compose({
     scenes: script.scenes,
@@ -130,6 +142,7 @@ export async function buildVideo(req: BuildRequest): Promise<BuildResult> {
   // ── 9. render (GPU → fallback CPU) ─────────────────────────────────────────
   const outSlug = slug + (vertical ? '-9x16' : '-16x9');
   const renderOut = path.join(projectDir, 'renders', `${outSlug}.mp4`);
+  emit('render');
   console.log('[mkivideos] render...');
   try {
     await hfRender(projectDir, renderOut, { gpu: true });
@@ -143,6 +156,7 @@ export async function buildVideo(req: BuildRequest): Promise<BuildResult> {
   console.log(`[mkivideos] pronto: ${renderOut} (${duration.toFixed(1)}s)`);
 
   // ── 10. move para o destino ────────────────────────────────────────────────
+  emit('movendo');
   let finalPath = renderOut;
   if (req.output) {
     const isFile = req.output.toLowerCase().endsWith('.mp4');
