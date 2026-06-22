@@ -17,18 +17,23 @@ function main(): void {
 
   switch (cmd) {
     case 'gerar': {
-      // mkivideos gerar "título aqui" [--vertical] [--cenas N] [--tema <tema>] [--pasta <dir>]
-      const flags = new Set(['--vertical', '-v', '--cenas', '--tema', '--pasta', '--imagens', '--voz']);
-      const valuedFlags = new Set(['--cenas', '--tema', '--pasta', '--imagens', '--voz']);
+      // mkivideos gerar "tema" [--tipo X] [--vertical|--horizontal] [--marca id]
+      //                        [--cenas N] [--tema <eyebrow>] [--pasta <dir>] [--imagens <p>] [--voz <n>]
+      const boolFlags = new Set(['--vertical', '-v', '--horizontal', '-h']);
+      const valuedFlags = new Set(['--tipo', '--marca', '--cenas', '--tema', '--pasta', '--imagens', '--voz']);
       const tituloTokens: string[] = [];
       for (let i = 0; i < rest.length; i++) {
-        if (flags.has(rest[i])) { if (valuedFlags.has(rest[i])) i++; continue; }
+        if (boolFlags.has(rest[i])) continue;
+        if (valuedFlags.has(rest[i])) { i++; continue; }
         tituloTokens.push(rest[i]);
       }
       const titulo = tituloTokens.join(' ').replace(/^["']|["']$/g, '').trim();
       const cenas = optVal(rest, '--cenas');
       void cmdGerar(titulo, {
+        tipo: optVal(rest, '--tipo'),
+        marca: optVal(rest, '--marca'),
         vertical: rest.includes('--vertical') || rest.includes('-v'),
+        horizontal: rest.includes('--horizontal') || rest.includes('-h'),
         pasta: optVal(rest, '--pasta'),
         cenas: cenas ? parseInt(cenas) : undefined,
         tema: optVal(rest, '--tema'),

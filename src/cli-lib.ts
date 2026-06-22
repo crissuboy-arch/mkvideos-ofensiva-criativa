@@ -8,7 +8,10 @@ import path from 'node:path';
 
 import { parseVideoCommand, formatQueueList } from './queue.js';
 import type { QueueDeps, QueueStore } from './types.js';
-import { buildVideo } from './offline-builder.js';
+import { buildVideo } from './engine/pipeline.js';
+import { VIDEO_TYPES } from './specs/types.js';
+import type { VideoType } from './specs/types.js';
+import { brandIds } from './brands/index.js';
 
 const run = promisify(execFile);
 
@@ -45,28 +48,44 @@ export function optVal(tokens: string[], name: string): string | undefined {
   return i >= 0 ? tokens[i + 1] : undefined;
 }
 
-/** Gera vídeo offline sem API: TTS local → HyperFrames → FFmpeg. */
+/** Valida o tipo de vídeo (cai em explicativo com aviso se for inválido). */
+export function resolveTipo(tipo?: string): VideoType {
+  if (!tipo) return 'explicativo';
+  const t = tipo.toLowerCase().trim();
+  if ((VIDEO_TYPES as string[]).includes(t)) return t as VideoType;
+  console.warn(`[mkivideos] tipo "${tipo}" inválido — usando explicativo. Tipos: ${VIDEO_TYPES.join(', ')}`);
+  return 'explicativo';
+}
+
+/** Gera vídeo offline sem API: roteiro → TTS local → HyperFrames → FFmpeg. */
 export async function cmdGerar(titulo: string, opts: {
+  tipo?: string;
+  marca?: string;
   vertical?: boolean;
+  horizontal?: boolean;
   pasta?: string;
   cenas?: number;
   tema?: string;
   imagens?: string;
   voz?: string;
 }): Promise<string> {
-  if (!titulo.trim()) return 'erro: informe o título do vídeo.';
-  console.log(`[mkivideos] gerando "${titulo}"...`);
+  if (!titulo.trim()) return 'erro: informe o tema/título do vídeo.';
+  const tipo = resolveTipo(opts.tipo);
+  console.log(`[mkivideos] gerando "${titulo}" (${tipo})...`);
   try {
     const result = await buildVideo({
       titulo: titulo.trim(),
+      tipo,
+      marca: opts.marca,
       tema: opts.tema,
       n_cenas: opts.cenas,
-      vertical: opts.vertical ?? true,
+      vertical: opts.vertical,
+      horizontal: opts.horizontal,
       output: opts.pasta,
       imagens_dir: opts.imagens,
       voz: opts.voz,
     });
-    return `✅ Vídeo gerado: ${result.mp4} (${result.duration.toFixed(1)}s)`;
+    return `✅ Vídeo gerado (${result.format}): ${result.mp4} (${result.duration.toFixed(1)}s)`;
   } catch (e) {
     return `❌ Falhou: ${(e as Error).message}`;
   }
@@ -95,17 +114,23 @@ export function makeDefaultDeps(): QueueDeps {
 
 export function usage(): string {
   return [
-    'mkivideos — gerador de vídeos (offline)',
+    'mkivideos — motor universal de vídeos (offline)',
     '',
     'Uso:',
-    '  mkivideos gerar "<título>" [--vertical] [--cenas <n>] [--tema <tema>] [--pasta <caminho>] [--imagens <pasta>] [--voz <nome>]',
+    '  mkivideos gerar "<tema>" [--tipo <tipo>] [--vertical|--horizontal] [--marca <id>]',
+    '                          [--cenas <n>] [--tema <eyebrow>] [--pasta <caminho>]',
+    '                          [--imagens <pasta>] [--voz <nome>]',
     '  mkivideos add <explicativo|curso|demo> <assunto> [--vertical] [--enviar] [--silencioso] [--pasta <caminho>]',
     '  mkivideos fila',
     '  mkivideos cancelar <id>',
     '  mkivideos run [--port <n>] [--token <t>]    # daemon: processa a fila (1/vez) + dashboard opcional',
     '',
+    `  tipos:  ${VIDEO_TYPES.join(', ')}`,
+    `  marcas: ${brandIds().join(', ')}`,
+    '',
     'Env:',
-    '  MKIVIDEOS_DB   caminho do banco SQLite (default: ./mkivideos.db)',
+    '  MKIVIDEOS_DB      caminho do banco SQLite (default: ./mkivideos.db)',
+    '  MKIVIDEOS_VOZES   pasta-raiz de vozes personalizadas',
     '',
     'Requer: HyperFrames, FFmpeg, Kokoro TTS e Chrome headless instalados localmente.',
   ].join('\n');
