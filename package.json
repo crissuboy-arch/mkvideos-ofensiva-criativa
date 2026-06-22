@@ -1,7 +1,7 @@
 {
   "name": "mkivideos",
-  "version": "0.2.0",
-  "description": "Motor portável de fila de vídeos (explicativo/curso/demo) — host-agnóstico, ports & adapters. Roda em qualquer jarvis (openpcbot, openclaw, hermes…) ou standalone (CLI + dashboard).",
+  "version": "0.4.0",
+  "description": "Motor universal de vídeos (offline): 7 tipos, 15 cenas, 7 marcas, 9:16/16:9, sync por áudio real — + Centro de Operações de Conteúdo (calendário, agendamento, contas, worker de publicação mock, lotes, logs). CLI + fila host-agnóstica.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -20,6 +20,10 @@
     "./dashboard": {
       "types": "./dist/dashboard.d.ts",
       "import": "./dist/dashboard.js"
+    },
+    "./content": {
+      "types": "./dist/content/index.d.ts",
+      "import": "./dist/content/index.js"
     }
   },
   "files": [
@@ -33,7 +37,8 @@
     "prepare": "tsc"
   },
   "dependencies": {
-    "better-sqlite3": "^11.8.1"
+    "better-sqlite3": "^11.8.1",
+    "gsap": "^3.15.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",
