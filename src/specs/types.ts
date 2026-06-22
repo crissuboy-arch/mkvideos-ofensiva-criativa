@@ -7,16 +7,25 @@ export type Format = 'vertical' | 'horizontal';
 
 /** Tipos universais de vídeo (cada um tem uma "receita" de arco em src/templates). */
 export type VideoType =
-  | 'explicativo'
-  | 'vendas'
-  | 'curso'
+  | 'tiktok-viral'
+  | 'curiosidades'
   | 'storytelling'
-  | 'tutorial'
+  | 'novela-curta'
+  | 'motivacional'
+  | 'autoridade'
+  | 'vendas'
+  | 'produto-digital'
   | 'anuncio'
-  | 'motivacional';
+  | 'explicativo'
+  | 'curso'
+  | 'tutorial'
+  | 'bonequinhas-3d'
+  | 'historias-infantis';
 
 export const VIDEO_TYPES: VideoType[] = [
-  'explicativo', 'vendas', 'curso', 'storytelling', 'tutorial', 'anuncio', 'motivacional',
+  'tiktok-viral', 'curiosidades', 'storytelling', 'novela-curta', 'motivacional',
+  'autoridade', 'vendas', 'produto-digital', 'anuncio', 'explicativo',
+  'curso', 'tutorial', 'bonequinhas-3d', 'historias-infantis',
 ];
 
 /** Tipos profissionais de cena (cada um é um renderer em src/scenes). */

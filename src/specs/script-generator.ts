@@ -4,7 +4,7 @@
 import { parseTheme, cap } from './theme.js';
 import { resolveFormat } from './formats.js';
 import { getTemplate } from '../templates/index.js';
-import { ctaNarration } from '../templates/phrases.js';
+import { brandSignoff } from '../templates/phrases.js';
 import { getBrand } from '../brands/index.js';
 import type { ScriptSpec, SceneSpec, VideoType } from './types.js';
 
@@ -65,7 +65,7 @@ export function generateScript(input: GenerateScriptInput): ScriptSpec {
 
   const ctaScene: SceneSpec = {
     type: 'cta',
-    narration: ctaNarration(brand),
+    narration: built.ctaBridge ? `${built.ctaBridge} ${brandSignoff(brand)}` : brandSignoff(brand),
     caption: brand.instagram,
     transIn: 'fadeBlack',
   };

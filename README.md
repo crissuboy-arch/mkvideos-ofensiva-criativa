@@ -10,7 +10,7 @@ Marca padrão: **OFENSIVA CRIATIVA — Marketing Sem Filtro** (trocável por pre
 
 ## O que mudou (v0.3 — motor universal)
 
-- **7 tipos de vídeo**: `explicativo`, `vendas`, `curso`, `storytelling`, `tutorial`, `anuncio`, `motivacional`.
+- **14 tipos de vídeo** (roteiros por nicho, com ganchos fortes e anti-repetição do tema): `tiktok-viral`, `curiosidades`, `storytelling`, `novela-curta`, `motivacional`, `autoridade`, `vendas`, `produto-digital`, `anuncio`, `explicativo`, `curso`, `tutorial`, `bonequinhas-3d`, `historias-infantis`.
 - **15 cenas profissionais**: title, topic, lead, bullets, cards, steps, term, compare, illus, img, imgrow, quote, proof, offer, cta.
 - **Gerador de roteiro por tema** (offline, determinístico): gancho → promessa → cenas numeradas → narração → legenda → CTA.
 - **2 formatos**: `--vertical` 9:16 (Reels/Shorts/TikTok) e `--horizontal` 16:9 (YouTube/aulas).
