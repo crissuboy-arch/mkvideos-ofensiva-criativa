@@ -41,9 +41,21 @@ export async function hfInspect(cwd: string, samples = 8): Promise<string> {
 /**
  * Render para `output`. GPU é opt-in (não ajuda este pipeline e já causou hang em
  * máquina sem GPU dedicada). `timeoutMs` limita o tempo para o render nunca pendurar.
+ *
+ * Render leve via env (sem env = comportamento atual, --quality high):
+ *   MKIVIDEOS_RENDER_QUALITY=draft|standard|high  (default: high)
+ *   MKIVIDEOS_RENDER_FPS=15                        (default: HyperFrames = 30)
+ *   MKIVIDEOS_RENDER_WORKERS=1                     (default: auto)
+ *   MKIVIDEOS_LOW_MEMORY=1                         (default: off) → --low-memory-mode
  */
 export async function hfRender(cwd: string, output: string, opts: { gpu?: boolean; timeoutMs?: number } = {}): Promise<string> {
-  const flags = ['render', '--quality', 'high'];
+  const quality = process.env.MKIVIDEOS_RENDER_QUALITY || 'high';
+  const fps = process.env.MKIVIDEOS_RENDER_FPS;
+  const workers = process.env.MKIVIDEOS_RENDER_WORKERS;
+  const flags = ['render', '--quality', quality];
+  if (fps) flags.push('--fps', fps);
+  if (workers) flags.push('-w', workers);
+  if (process.env.MKIVIDEOS_LOW_MEMORY === '1') flags.push('--low-memory-mode');
   if (opts.gpu) flags.push('--gpu', '--browser-gpu');
   flags.push('--output', output);
   return runHyperframes(flags, cwd, { timeoutMs: opts.timeoutMs });
