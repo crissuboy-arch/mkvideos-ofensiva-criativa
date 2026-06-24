@@ -1,0 +1,4 @@
+# artefatos gerados pelo selftest / runs
+_assets/
+out/
+.tmp/
