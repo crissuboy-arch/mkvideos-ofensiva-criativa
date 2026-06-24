@@ -2,3 +2,6 @@
 _assets/
 out/
 .tmp/
+
+# pastas de teste real (entrada do modo dir) — não versionar
+novela01/
