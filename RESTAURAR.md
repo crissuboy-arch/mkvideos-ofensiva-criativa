@@ -140,22 +140,52 @@ C:\Users\<voce>\
 
 ## 9. Variáveis de ambiente (opcional)
 
-Criar `.env` na raiz do projeto (não commitar):
+Copie `.env.example` para `.env` na raiz do projeto (nunca commitar `.env`):
 
-```env
-# caminho do banco de dados da fila (padrão: ./mkivideos.db)
-MKIVIDEOS_DB=C:\Users\<voce>\meus-videos-ia\mkivideos\mkivideos.db
+```bash
+cp .env.example .env
 ```
+
+Tudo tem default seguro. Cobre a fila/painel (`MKIVIDEOS_DB`, `MKIVIDEOS_VOZES`,
+render) e a funcionalidade **URL → Vídeo** (`AI_PROVIDER`, `OPENAI_API_KEY`,
+`MKIVIDEOS_URL2VIDEO_*`, `MKIVIDEOS_C2V_*`) — ver
+[`docs/url-para-video.md`](docs/url-para-video.md) para o detalhe de cada uma.
 
 ---
 
 ## 10. Verificação de saúde
 
 ```bash
-npx hyperframes@0.6.80 doctor
+npx hyperframes@0.6.80 doctor   # Node, FFmpeg, Chrome (render offline)
+mkivideos doctor                # idem + Codex/OpenAI + motor content2video (URL → Vídeo)
 ```
 
-Deve mostrar: Node, FFmpeg, Chrome — todos ✅.
+Deve mostrar tudo ✅ nos itens obrigatórios; os itens ⚠️ só afetam a URL → Vídeo.
+
+## 11. URL → Vídeo (opcional — só se for usar essa funcionalidade)
+
+```bash
+npm install -g @openai/codex   # ou configure OPENAI_API_KEY no .env (AI_PROVIDER=openai)
+codex login
+mkivideos doctor                # confirma tudo antes de usar
+mkivideos url2video status
+```
+
+Detalhes completos: [`docs/url-para-video.md`](docs/url-para-video.md).
+
+## 12. Música + Videoclipe / Otimizar Vídeo / Legendar (opcional)
+
+```powershell
+winget install Python.Python.3.12      # Música e Otimizar Vídeo são Python
+# reiniciar o terminal
+pip install -r modules/otimizevideo/requirements.txt   # só para Otimizar Vídeo
+winget install yt-dlp.yt-dlp           # opcional — Otimizar Vídeo a partir de URL
+```
+
+No `.env` (copiado de `.env.example`), preencha só o que for usar:
+`KIE_API_KEY` (música paga), `AGNES_API_KEY` (capa/clipe grátis),
+`GROQ_API_KEY` (transcrição), `OPENROUTER_API_KEY` (pontuação). Rode
+`mkivideos doctor` para conferir. Detalhes: [`docs/modulos-video.md`](docs/modulos-video.md).
 
 ---
 
@@ -164,7 +194,7 @@ Deve mostrar: Node, FFmpeg, Chrome — todos ✅.
 | Problema | Causa | Solução |
 |----------|-------|---------|
 | `ffmpeg not found` | FFmpeg não está no PATH | Reiniciar terminal após `winget install` |
-| `better-sqlite3` falha no install | Falta build tools | `winget install Microsoft.VisualStudio.2022.BuildTools` |
+| `better-sqlite3` falha no install | Falta build tools, **ou** não há prebuild para a versão do Node em uso (visto com Node 24) | `winget install Microsoft.VisualStudio.2022.BuildTools`; ou use um Node LTS com prebuild disponível (`nvm install 22` / `20`). Enquanto isso, `npm install --ignore-scripts` instala o resto (typecheck/build/testes fora de `content/store` e `sqlite-store` funcionam) |
 | `Chrome not found` | HyperFrames sem browser | `npx hyperframes@0.6.80 browser ensure` |
 | `pf_dora` não encontrado | Modelo Kokoro não baixado | Rodar o TTS uma vez — baixa automaticamente |
 | Render sai vazio | FFmpeg path errado no Git Bash | Usar `ffmpeg -nostdin` ou PowerShell |

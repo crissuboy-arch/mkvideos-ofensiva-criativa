@@ -61,3 +61,75 @@ export type {
 // ── publishers (mocks; sem better-sqlite3) ──────────────────────────────────
 export { getPublisher, PUBLISHERS } from './publishers/index.js';
 export type { Publisher, PublishContext, PublishResult } from './publishers/index.js';
+
+// ── URL → Vídeo (motor content2video como módulo) ──────────────────────────
+export { Url2VideoService, url2video } from './url2video/service.js';
+export { loadDefaults as url2videoDefaults } from './url2video/config.js';
+export { normalizeRequest, normalizeTransform, validateUrl } from './url2video/validate.js';
+export { Url2VideoValidationError } from './url2video/types.js';
+export type {
+  Url2VideoDefaults, Url2VideoRequest, Url2VideoRequestRaw,
+} from './url2video/types.js';
+export type { Url2VideoStatus } from './url2video/service.js';
+export { runUrl2VideoCli, url2videoUsage } from './url2video/cli.js';
+
+// ── camada de motores / provedores (arquitetura extensível) ────────────────
+export { getEngine, engineIds, registerEngine } from './engines/registry.js';
+export {
+  listProviders, getProvider, implementedProviderIds, plannedProviderIds,
+} from './engines/providers/registry.js';
+export {
+  EngineError, EngineNotAvailableError, EngineNotImplementedError,
+  ASPECT_RATIOS, CONVERSATION_STYLES, SPEECH_PACES, aspectToFormat, formatToAspect,
+} from './engines/types.js';
+export type {
+  VideoEngine, EngineId, EngineJob, EngineProject, EngineHealth, EngineConfigInfo,
+  EngineCapabilities, UrlToVideoInput, AspectRatio, ConversationStyle, SpeechPace,
+} from './engines/types.js';
+export type { MediaProvider, ProviderId } from './engines/providers/types.js';
+
+// ── preflight ─────────────────────────────────────────────────────────────
+export { runDoctor, formatDoctor, parseNodeMajor } from './preflight/doctor.js';
+export type { DoctorReport, Check } from './preflight/doctor.js';
+
+// ── env ───────────────────────────────────────────────────────────────────
+export { loadEnv } from './env.js';
+
+// ── camada de custo (gate de gasto — nenhum provider pago roda sem confirmação) ──
+export { requireAuthorization, ceilingFromEnv, costLedger, recordAuthorized } from './cost/gate.js';
+export {
+  CostAuthorizationRequiredError, CostCeilingExceededError,
+} from './cost/types.js';
+export type { CostEstimate, CostLedgerEntry } from './cost/types.js';
+
+// ── Música + Videoclipe (modules/musicavideo) ─────────────────────────────
+export { MusicavideoService, musicavideo } from './musicavideo/service.js';
+export { runMusicavideoCli, musicavideoUsage } from './musicavideo/cli.js';
+export type { EstadoMusicavideo, PlanoMusicavideo, ParteMusicavideo, IndiceLinha } from './musicavideo/types.js';
+
+// ── Otimizar Vídeo (modules/otimizevideo) ─────────────────────────────────
+export { OtimizevideoService, otimizevideo } from './otimizevideo/service.js';
+export { runOtimizevideoCli, otimizevideoUsage } from './otimizevideo/cli.js';
+export type { ModoOtv, PlanoOtv, StatusOtv } from './otimizevideo/types.js';
+
+// ── Legendar (transcrição via otimizevideo + queima FFmpeg própria) ───────
+export { LegendasService, legendas } from './legendas/service.js';
+export { runLegendasCli, legendasUsage } from './legendas/cli.js';
+export { LegendaStore } from './legendas/store.js';
+export {
+  wordsToCues, cuesToSrt, parseSrt, shiftCues, formatTimestamp,
+} from './legendas/srt.js';
+export type { Cue, Transcript, PalavraTranscrita } from './legendas/srt.js';
+export type { LegendaProject } from './legendas/store.js';
+
+// ── vídeo: wrapper FFmpeg (queima/mux de legenda) ─────────────────────────
+export { burnSubtitles, muxSoftSubtitles, escapeSubtitlesPath, ffmpegBin } from './video/ffmpeg.js';
+export type { SubtitleStyle } from './video/ffmpeg.js';
+
+// ── Biblioteca (índice unificado, só leitura) ─────────────────────────────
+export { scanLibrary, isLibraryPathAllowed } from './biblioteca/index.js';
+export type { LibraryItem, LibrarySource } from './biblioteca/index.js';
+
+// ── helpers de ferramentas locais ────────────────────────────────────────
+export { runTool, resolvePython, LocalToolError } from './localtools/exec.js';
+export { dataRoot, moduleDataDir } from './localtools/datadir.js';

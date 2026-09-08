@@ -1,0 +1,72 @@
+{
+ "provider": "agnes",
+ "env_keys": [
+  "AGNES_API_KEY",
+  "AGNES_API_KEY_2",
+  "AGNES_API_KEY_3",
+  "AGNES_API_KEY_4"
+ ],
+ "modelos": [
+  {
+   "id": "agnes-image-2.1-flash",
+   "capacidade": "imagem",
+   "custo": {
+    "base_usd": 0.0,
+    "por": "geracao"
+   },
+   "params": {
+    "tamanho": {
+     "default": "1024x1024"
+    }
+   },
+   "prompt": {
+    "idioma": "en"
+   }
+  },
+  {
+   "id": "agnes-video-v2.0",
+   "capacidade": "video",
+   "custo": {
+    "base_usd": 0.0,
+    "por": "segundo"
+   },
+   "params": {
+    "resolucao": {
+     "default": "1312x736"
+    },
+    "duracao_shot_s": {
+     "default": 5,
+     "max": 20
+    }
+   },
+   "prompt": {
+    "idioma": "en"
+   }
+  },
+  {
+   "id": "agnes-video-2.5-flash",
+   "capacidade": "video",
+   "custo": {
+    "base_usd": 0.0,
+    "por": "segundo"
+   },
+   "params": {
+    "resolucao": {
+     "default": "1312x736"
+    },
+    "duracao_shot_s": {
+     "default": 5,
+     "max": 20
+    }
+   },
+   "prompt": {
+    "remover": [
+     "cinematic 24fps",
+     "24fps"
+    ],
+    "acrescentar": [],
+    "idioma": "en"
+   }
+  }
+ ]
+}

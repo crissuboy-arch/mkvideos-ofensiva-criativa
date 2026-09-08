@@ -4,6 +4,7 @@
 
 import path from 'node:path';
 
+import { loadEnv } from './env.js';
 import { initVideoQueue } from './queue.js';
 import { SqliteQueueStore } from './sqlite-store.js';
 import { createDashboardServer } from './dashboard.js';
@@ -13,11 +14,60 @@ import { createPanelServer } from './content/panel.js';
 import { startScheduler } from './content/scheduler.js';
 import { platformFormat } from './content/types.js';
 import { buildVideo } from './engine/pipeline.js';
+import { url2video } from './url2video/service.js';
+import { runUrl2VideoCli } from './url2video/cli.js';
+import { runMusicavideoCli } from './musicavideo/cli.js';
+import { runOtimizevideoCli } from './otimizevideo/cli.js';
+import { runLegendasCli } from './legendas/cli.js';
+import { stopEngineProcess } from './engines/content2video/process.js';
+import { runDoctor, formatDoctor } from './preflight/doctor.js';
+import { scanLibrary } from './biblioteca/index.js';
+
+loadEnv();
 
 const DB = process.env.MKIVIDEOS_DB || path.resolve('mkivideos.db');
 
 function main(): void {
   const [, , cmd, ...rest] = process.argv;
+
+  if (cmd === 'doctor') {
+    void runDoctor().then((r) => {
+      console.log(formatDoctor(r));
+      process.exit(r.ok ? 0 : 1);
+    });
+    return;
+  }
+
+  if (cmd === 'url2video' || cmd === 'url-para-video') {
+    // Comando one-shot: se o motor foi subido para esta chamada, encerra-o ao
+    // terminar (o estado dos jobs vive na sessão do processo — ver painel).
+    void runUrl2VideoCli(rest)
+      .then((msg) => { console.log(msg); })
+      .catch((e) => { console.error(`❌ ${(e as Error).message}`); process.exitCode = 1; })
+      .finally(async () => { await stopEngineProcess(); });
+    return;
+  }
+
+  const modCli: Record<string, (a: string[]) => Promise<string>> = {
+    musicavideo: runMusicavideoCli,
+    otimizevideo: runOtimizevideoCli,
+    legendas: runLegendasCli,
+  };
+  if (cmd && modCli[cmd]) {
+    void modCli[cmd](rest)
+      .then((msg) => { console.log(msg); })
+      .catch((e) => { console.error(`❌ ${(e as Error).message}`); process.exitCode = 1; });
+    return;
+  }
+
+  if (cmd === 'biblioteca') {
+    const items = scanLibrary();
+    console.log(items.length
+      ? items.map((i) => `[${i.source}] ${i.title} — ${(i.sizeBytes / 1048576).toFixed(1)}MB — ${i.videoPath}`).join('\n')
+      : '(biblioteca vazia)');
+    return;
+  }
+
   const store = new SqliteQueueStore(DB);
 
   switch (cmd) {
@@ -70,6 +120,8 @@ function main(): void {
       if (seeded) console.log(`(criei ${seeded} contas-exemplo)`);
       createPanelServer(content, {
         port, token,
+        url2video: url2video(),
+        hub: true,
         generate: async (item, { onPhase }) => {
           const fmt = platformFormat(item.plataforma);
           const r = await buildVideo({

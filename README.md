@@ -154,6 +154,57 @@ Programático: `import { SqliteContentStore, createPanelServer, startScheduler, 
 
 ---
 
+## URL → Vídeo (link vira vídeo, via motor content2video)
+
+Cole uma URL (matéria, blog, produto) e o MKVideos analisa o conteúdo, cria
+roteiro, storyboard, direção visual e uma **cena-piloto** para você aprovar
+antes de produzir o vídeo completo — narração, legendas, motion design e MP4.
+Aparece como aba **"URL → Vídeo"** no mesmo `painel` (não é um app separado) e
+também tem CLI própria.
+
+```bash
+mkivideos painel --port 3142          # abre a aba "URL → Vídeo" em /painel
+mkivideos url2video status            # motor, requisitos, defaults
+mkivideos url2video "https://exemplo.com/materia" --formato 9:16
+mkivideos url2video aprovar <jobId>   # aprova a cena-piloto → produção completa
+mkivideos url2video renderizar <slug> # gera o MP4 final
+```
+
+Isso é o motor **Content2Video INEMA** (`modules/content2video/`) integrado como
+**módulo/engine**, não reescrito: o MKVideos sobe o processo em loopback sob
+demanda, nunca serve a UI original dele, e apresenta tudo com a identidade
+visual do MKVideos. Detalhes completos, requisitos, variáveis de ambiente,
+limitações e a arquitetura de motores/provedores (preparada para Kling, Veo,
+Runway, HeyGen, Sora, avatar e mídia local — ainda não implementados): ver
+[`docs/url-para-video.md`](docs/url-para-video.md) e
+[`docs/arquitetura-motores.md`](docs/arquitetura-motores.md).
+
+> Diferença para o `gerar` acima: `gerar` é 100% offline/determinístico a partir
+> de um **tema**; `url2video` parte de uma **URL real**, usa um provedor de IA
+> (Codex CLI por padrão) para pesquisar a fonte e escrever o roteiro, e tem um
+> gate de aprovação visual antes de produzir tudo.
+
+## Central de vídeo: Música, Otimização, Legendas, Biblioteca
+
+O MKVideos também é a interface única para mais três motores locais, todos como
+aba do `painel` e subcomando da CLI. **Nenhum provider pago roda sem confirmação
+explícita** (`--autorizo-gasto` na CLI, `confirm()` no painel) — ver
+[`docs/modulos-video.md`](docs/modulos-video.md) para o detalhe completo.
+
+| Aba / comando | O que faz | Motor |
+|---|---|---|
+| **Música + Videoclipe** (`mkivideos musicavideo`) | ideia → plano (letra/estilo/BPM) → aprovar música → capa → clipe cena a cena, reprovando/regenerando só o que não prestou | `modules/musicavideo` (MIT) |
+| **Otimizar Vídeo** (`mkivideos otimizevideo`) | vídeo longo → transcrição → cenas → pontuação → seleção → corte de ~2 min. O LLM nunca escolhe timestamps | `modules/otimizevideo` |
+| **Legendar** (`mkivideos legendas`) | enviar vídeo → transcrever → revisar/editar/sincronizar → queimar legenda (ou faixa selecionável) | código próprio (transcrição via otimizevideo, queima via FFmpeg) |
+| **Biblioteca** (`mkivideos biblioteca`) | lista só-leitura de tudo que já foi produzido localmente (todos os módulos + `gerar`) | código próprio |
+
+```bash
+mkivideos painel --port 3142   # abre todas as abas
+mkivideos doctor               # Node, Python, FFmpeg, yt-dlp, chaves, módulos
+```
+
+Licenças dos módulos vendorizados: [`LICENCAS-MODULOS.md`](LICENCAS-MODULOS.md).
+
 ## Modo fila (online, requer Claude logado)
 
 Independente do `gerar` offline: a fila usa `claude -p` para rodar skills de vídeo (explicativo/curso/demo) com agente autônomo.
@@ -179,10 +230,29 @@ engine/     timing (sync por áudio), motion (M.* + transições), pipeline (orq
 audio/      TTS (Kokoro/XTTS/pré-gravado), ffprobe, música de fundo
 render/     wrappers HyperFrames + setup do projeto (gsap/fontes/imagens)
 composer.ts spec resolvido → index.html final
-content/    centro de operações: store SQLite (conteúdo/contas/logs) + painel HTTP + scheduler (worker)
+content/    centro de operações: store SQLite (conteúdo/contas/logs) + painel HTTP (+ aba URL → Vídeo) + scheduler (worker)
 publishers/ adapters de publicação por plataforma (tiktok/instagram/youtube/facebook — mocks)
-cli.ts / cli-lib.ts   comandos `gerar` + `painel` + fila
+engines/    motores de vídeo plugáveis (interface VideoEngine) + adapter do content2video + providers/ (mídia por cena)
+url2video/  funcionalidade "URL → Vídeo": defaults, validação, serviço único usado pelo painel e pela CLI
+musicavideo/  adapter do CLI musicavideo (Música + Videoclipe) — spawn Python + leitura de estado.json
+otimizevideo/ adapter do CLI otv (Otimizar Vídeo) — fases + gate de custo
+legendas/   transcrever/revisar/queimar legenda (reaproveita otimizevideo p/ ASR, FFmpeg próprio p/ queima)
+biblioteca/ índice unificado só-leitura de todo o acervo local
+cost/       gate de gasto compartilhado — nenhum provider pago roda sem confirmação explícita
+video/      wrapper FFmpeg (queima/mux de legenda)
+localtools/ helpers de spawn de CLI (Python, timeout, erro) + raiz de dados locais
+preflight/  `mkivideos doctor` — verifica Node/Python/FFmpeg/yt-dlp/Codex/chaves/módulos
+env.ts      loader de .env sem dependência (nunca versiona segredos)
+cli.ts / cli-lib.ts   comandos `gerar` + `painel` + `url2video` + `musicavideo` + `otimizevideo` + `legendas` + `biblioteca` + `doctor` + fila
 queue.ts / sqlite-store.ts / dashboard.ts   fila host-agnóstica (ports & adapters)
+```
+
+```
+modules/content2video/    motor da URL → Vídeo (servidor local; ver ORIGEM.md/PATCHES.md dentro da pasta)
+modules/musicavideo/      motor da Música + Videoclipe (CLI Python; MIT)
+modules/otimizevideo/     motor da Otimização (CLI Python)
+modules/videosub/         referência da técnica de queima de legenda (NÃO executado — ver ORIGEM.md)
+modules/musicavideo-pub/  só ORIGEM.md — vitrine pública NÃO integrada (ver ORIGEM.md)
 ```
 
 Fluxo do `gerar`: **tema → roteiro (specs) → TTS (audio) → composição (composer) → render (render) → MP4**.
@@ -193,9 +263,18 @@ Fluxo do `gerar`: **tema → roteiro (specs) → TTS (audio) → composição (c
 
 ```bash
 npm run build      # tsc → dist/
-npm test           # vitest (96 testes)
+npm test           # vitest
 npm run typecheck  # checagem de tipos sem build
+npm run doctor      # Node, FFmpeg/FFprobe, Codex CLI, motor content2video — ver docs/url-para-video.md
 ```
+
+> `better-sqlite3` compila um binário nativo no `npm install`. Em máquina Windows sem
+> as *Build Tools* do Visual Studio (ou sem prebuild para a versão do Node em uso), o
+> install falha só nessa dependência — o resto do projeto (typecheck/build/testes que
+> não tocam `content/store` ou `sqlite-store`) funciona normalmente com
+> `npm install --ignore-scripts`. Solução definitiva: `winget install
+> Microsoft.VisualStudio.2022.BuildTools` (ver RESTAURAR.md) ou usar um Node com
+> prebuild disponível para `better-sqlite3`.
 
 Como usar a API programaticamente:
 

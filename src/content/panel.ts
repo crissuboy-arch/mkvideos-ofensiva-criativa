@@ -14,12 +14,21 @@ import {
 } from './types.js';
 import { VIDEO_TYPES } from '../specs/types.js';
 import { brandIds } from '../brands/index.js';
+import type { Url2VideoService } from '../url2video/service.js';
+import { handleUrl2Video } from './url2video-routes.js';
+import { URL2VIDEO_SCRIPT, URL2VIDEO_STYLE, URL2VIDEO_TAB_BUTTON, URL2VIDEO_VIEW_HTML } from './url2video-view.js';
+import { handleHub } from './hub-routes.js';
+import { HUB_SCRIPT, HUB_STYLE, HUB_TAB_BUTTONS, HUB_VIEWS_HTML } from './hub-view.js';
 
 export interface PanelOptions {
   port?: number;
   token?: string;
   /** Dispara a geração do vídeo do item; recebe callback de mudança de fase. */
   generate?: (item: ContentItem, ctx: { onPhase: (s: ContentStatus) => void }) => Promise<string>;
+  /** Habilita a aba "URL → Vídeo" (motor content2video). Opcional. */
+  url2video?: Url2VideoService;
+  /** Habilita as abas Música + Videoclipe / Otimizar Vídeo / Legendar / Biblioteca. */
+  hub?: boolean;
 }
 
 function readJson(req: http.IncomingMessage): Promise<Record<string, unknown>> {
@@ -85,9 +94,12 @@ export function createPanelServer(store: SqliteContentStore, opts: PanelOptions 
 
     if (m === 'GET' && (pathname === '/' || pathname === '/painel')) {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(getPanelHtml(token));
+      res.end(getPanelHtml(token, { url2video: !!opts.url2video, hub: !!opts.hub }));
       return;
     }
+
+    if (opts.url2video && (await handleUrl2Video(req, res, url, opts.url2video))) return;
+    if (opts.hub && (await handleHub(req, res, url))) return;
 
     if (m === 'GET' && pathname === '/api/options') {
       return json(res, 200, {
@@ -220,7 +232,9 @@ const isS = (v?: string): ContentStatus | undefined => (v && isStatus(v) ? v : u
 
 // ─── HTML autocontido (funcional, sem foco em design) ────────────────────────
 
-export function getPanelHtml(token = ''): string {
+export function getPanelHtml(token = '', feat: { url2video?: boolean; hub?: boolean } = {}): string {
+  const U2V = !!feat.url2video;
+  const HUB = !!feat.hub;
   return `<!DOCTYPE html>
 <html lang="pt-br"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -253,6 +267,8 @@ export function getPanelHtml(token = ''): string {
   .cal .dn{color:#8FA3BF;font-size:11px}.cal .c{color:#FFC300;font-weight:700;font-size:16px}
   .cal-list .day{background:#141d2e;border:1px solid #243250;border-radius:6px;padding:6px 10px;margin-bottom:6px}
   .cal-list .day .d{color:#FFC300;font-weight:600}
+  ${U2V ? URL2VIDEO_STYLE : ''}
+  ${HUB ? HUB_STYLE : ''}
 </style></head><body>
 <h1>🛰️ Centro de Operações de Conteúdo</h1>
 <div class="cards" id="cards"></div>
@@ -263,6 +279,8 @@ export function getPanelHtml(token = ''): string {
   <button id="t-cal" onclick="setTab('cal')">Calendário</button>
   <button id="t-acc" onclick="setTab('acc')">Contas</button>
   <button id="t-log" onclick="setTab('log')">Logs</button>
+  ${U2V ? URL2VIDEO_TAB_BUTTON : ''}
+  ${HUB ? HUB_TAB_BUTTONS : ''}
   <span class="muted" id="busy" style="margin-left:10px"></span>
 </div>
 
@@ -319,8 +337,12 @@ export function getPanelHtml(token = ''): string {
 </div>
 
 <div id="view-log" style="display:none"><div id="log-table"></div></div>
+${U2V ? URL2VIDEO_VIEW_HTML : ''}
+${HUB ? HUB_VIEWS_HTML : ''}
 
 <script>
+const U2V_ENABLED=${U2V ? 'true' : 'false'};
+const HUB_ENABLED=${HUB ? 'true' : 'false'};
 const TOKEN=${JSON.stringify(token)};
 const qs=TOKEN?('?token='+encodeURIComponent(TOKEN)):'';
 const sep=TOKEN?'&':'?';
@@ -344,9 +366,10 @@ async function boot(){
   fill(document.getElementById('flt-tipo'),OPTS.tipos.map(t=>({id:t,l:t})),x=>x.id,x=>x.l,'Tipo');
   fill(document.getElementById('flt-status'),OPTS.status.map(s=>({id:s,l:s})),x=>x.id,x=>x.l,'Status');
   document.getElementById('f-tz').value=OPTS.tz;
+  if(U2V_ENABLED) u2vLoadStatus();
   load();
 }
-function setTab(t){TAB=t;['lib','cal','acc','log'].forEach(x=>{document.getElementById('view-'+x).style.display=x===t?'':'none';document.getElementById('t-'+x).className=x===t?'active':'';});load();}
+function setTab(t){TAB=t;['lib','cal','acc','log','u2v','mvd','otv','leg','bib'].forEach(x=>{const v=document.getElementById('view-'+x),b=document.getElementById('t-'+x);if(v)v.style.display=x===t?'':'none';if(b)b.className=x===t?'active':'';});load();}
 function setCal(c){CAL=c;['hoje','semana','mes'].forEach(x=>document.getElementById('c-'+x).className=x===c?'active':'');load();}
 let dt=null;function debounced(){clearTimeout(dt);dt=setTimeout(load,350);}
 
@@ -362,6 +385,13 @@ async function load(){
   if(TAB==='cal') await loadCal();
   if(TAB==='acc') renderAccounts();
   if(TAB==='log') await loadLogs();
+  if(TAB==='u2v' && U2V_ENABLED) await u2vLoad();
+  if(HUB_ENABLED){
+    if(TAB==='mvd') mvdList();
+    if(TAB==='otv') otvList();
+    if(TAB==='leg') legList();
+    if(TAB==='bib') bibLoad();
+  }
 }
 function card(c,l,n){return '<div class="card '+c+'"><div class="n">'+n+'</div><div class="l">'+l+'</div></div>';}
 function accName(id){const a=ACCOUNTS.find(x=>x.id===id);return a?a.nome:'';}
@@ -468,6 +498,8 @@ async function addConta(){
 async function toggleConta(id,ativo){await api('/api/accounts/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ativo:!!ativo})});load();}
 async function delConta(id){if(!confirm('Excluir conta #'+id+'?'))return;await api('/api/accounts/'+id+'/delete',{method:'POST'});load();}
 
+${U2V ? URL2VIDEO_SCRIPT : ''}
+${HUB ? HUB_SCRIPT : ''}
 boot(); setInterval(load,5000);
 </script></body></html>`;
 }

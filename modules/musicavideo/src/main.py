@@ -1,0 +1,403 @@
+"""Dispatch dos subcomandos do musicavideo. Exit codes: 0 ok; 1 uso/validação;
+2 parte terminou em erro; 3 teto estourado."""
+import os
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+
+def out_dir() -> Path:
+    return Path(os.environ.get("MUSICAVIDEO_OUT",
+                str(Path.home() / "projetos/output/musicavideo")))
+
+
+USO = """uso: musicavideo <comando> ...
+  plano "<solicitação>" [slug] [--pesquisa] [--estilo X] [--idioma X] [--letra arq [--letra-final]]
+        [--faixa-pronta arq.mp3] [--motor parte=prov:modelo] [--ritmo auto|calmo|padrao|variado|dinamico] [--forca]
+  ver <slug> [musica|capa|clipe]
+  ajusta <slug> <parte> "<instrução>" [--refaz]
+  ok <slug> <parte>
+  faz <slug> [parte] [--sim] [--telegram] [--sem-revisao] [--motor parte=prov:modelo]
+  revisa  <slug> [parte]              # o que está esperando você olhar
+  aprova  <slug> <parte> [--faixa N]  # fecha a parte
+  reprova <slug> <parte> ["4,17,23"]  # descarta e devolve pro faz
+  tudo "<solicitação>" [--teto N] [demais flags de plano] [--sim] [--telegram]
+  monta <slug> [--completo]      # casa o clipe com CADA faixa (não gasta)
+  curto <slug> [--inicio N]      # Short 9:16 de 12s do núcleo da faixa (não gasta)
+  recorta <slug> [--ritmo X]     # dá ritmo a um clipe já gerado, reusando os shots (não gasta)
+  arte  <slug> ["<título>"] [--versao N] [--tagline "..."]   # recompõe (não gasta)
+  pacote <slug>                  # gera o PACOTE.md sob demanda
+  custo <slug> | lista [N] | busca "<termo>" | reindex
+  painel [--porta N] [--lan]     # navegador: acervo do musicavideo + analisevideo"""
+
+COMANDOS = {}   # nome -> callable(argv) -> int; preenchido pelas próximas tasks
+
+
+def _cmd_lista(args):
+    from src.indexer import lista
+    for l in lista(out_dir(), int(args[0]) if args else 10):
+        print(f"{l['slug']:40s} {l['estados']}  US${l['custo_gasto_usd']}")
+    return 0
+
+
+def _cmd_busca(args):
+    if not args:
+        print('uso: busca "<termo>"', file=sys.stderr)
+        return 1
+    from src.indexer import busca
+    for l in busca(out_dir(), args[0]):
+        print(f"{l['slug']:40s} {l['titulo']}")
+    return 0
+
+
+def _cmd_painel(args):
+    from src.painel import cmd_painel
+    return cmd_painel(args)
+
+
+def _cmd_reindex(args):
+    from src.indexer import reindex
+    print(f"reindexadas: {reindex(out_dir())} linhas")
+    return 0
+
+
+def _cmd_plano(args):
+    from src.planner import cmd_plano
+    return cmd_plano(args)
+
+
+def _cmd_ver(args):
+    from src.planner import cmd_ver
+    return cmd_ver(args)
+
+
+def _cmd_ok(args):
+    from src.planner import cmd_ok
+    return cmd_ok(args)
+
+
+def _cmd_ajusta(args):
+    from src.planner import cmd_ajusta
+    return cmd_ajusta(args)
+
+
+def _cmd_faz(args):
+    from src.executor import cmd_faz
+    return cmd_faz(args)
+
+
+def _cmd_monta(args):
+    from src.executor import cmd_monta
+    return cmd_monta(args)
+
+
+def _cmd_revisa(args):
+    from src.executor import cmd_revisa
+    return cmd_revisa(args)
+
+
+def _cmd_aprova(args):
+    from src.executor import cmd_aprova
+    return cmd_aprova(args)
+
+
+def _cmd_reprova(args):
+    from src.executor import cmd_reprova
+    return cmd_reprova(args)
+
+
+def _cmd_pacote(args):
+    from src.executor import cmd_pacote
+    return cmd_pacote(args)
+
+
+def _cmd_custo(args):
+    from src.executor import cmd_custo
+    return cmd_custo(args)
+
+
+def _cmd_tudo(args):
+    """Sem portão: planeja, aprova as 3 partes e executa respeitando o teto."""
+    import src.planner as pl
+    from src.executor import faz
+    from src.estado import carregar_estado, salvar_estado
+    if not args:
+        print('uso: tudo "<solicitação>" [--teto N] [--sim] [--telegram] [--estilo X] '
+              '[--letra arq [--letra-final]] [--pesquisa]', file=sys.stderr)
+        return 1
+    livres, opts = pl._parse_opts(args)
+    if not livres:
+        print('uso: tudo "<solicitação>" [flags]', file=sys.stderr)
+        return 1
+    solicitacao = livres[0]
+    if opts.get("pesquisa"):
+        from src.pesquisa import pesquisar
+        opts["pesquisa_md"] = pesquisar(solicitacao)
+    try:
+        plano = pl.gerar_plano(solicitacao, livres[1] if len(livres) > 1 else None,
+                               opts, out_dir())
+    except (ValueError, RuntimeError) as e:
+        print(f"erro: {e}", file=sys.stderr)
+        return 1
+    slug = plano["slug"]
+    for parte in ("musica", "capa", "clipe"):
+        pl.aprovar_parte(out_dir(), slug, parte)
+    if opts.get("teto") is not None:
+        w = out_dir() / slug
+        e = carregar_estado(w)
+        e["teto_usd"] = float(opts["teto"])
+        salvar_estado(w, e)
+    # `tudo` é o modo sem portão: nem o do plano, nem o do artefato.
+    # Ainda assim respeita a ordem — música primeiro, depois capa e clipe.
+    rc = faz(out_dir(), slug, ["musica"], sim=bool(opts.get("sim")),
+             telegram=bool(opts.get("telegram")), motor_override=opts.get("motor"),
+             sem_revisao=True)
+    if rc != 0:
+        return rc
+    return faz(out_dir(), slug, ["capa", "clipe"], sim=bool(opts.get("sim")),
+               telegram=bool(opts.get("telegram")), motor_override=opts.get("motor"),
+               sem_revisao=True)
+
+
+def _cmd_arte(args):
+    """Recompõe o título sobre a capa CRUA. Não chama provedor, não gasta nada —
+    é o comando pra ajustar a arte sem pagar a imagem de novo."""
+    import json
+    from src.arte import compor, ArteError
+    from src.planner import _parse_opts
+    if not args:
+        print('uso: arte <slug> ["<título>"] [--versao N] [--nova] [--tagline "..."]', file=sys.stderr)
+        return 1
+    livres, opts = _parse_opts(args)
+    w = out_dir() / livres[0]
+    plano_arq = w / "plano.json"
+    if not plano_arq.exists():
+        print(f"erro: slug '{livres[0]}' não encontrado em {out_dir()}", file=sys.stderr)
+        return 1
+    plano = json.loads(plano_arq.read_text(encoding="utf-8"))
+    bruta = w / "raw" / "capa-crua.png"
+    if not bruta.exists():
+        print("erro: não há capa crua (raw/capa-crua.png) — gere a capa antes "
+              "com `musicavideo faz <slug> capa`", file=sys.stderr)
+        return 1
+    titulo = livres[1] if len(livres) > 1 else plano.get("titulo", "")
+    # `--nova` gera uma IMAGEM PRÓPRIA para esta versão (inemaimg, custo zero),
+    # em vez de reusar o fundo da capa principal. É o que tira as duas capas
+    # idênticas das produções antigas, feitas antes de a versão ganhar imagem.
+    if opts.get("nova") and str(opts.get("versao", "")).isdigit():
+        from src.executor import crua_da_versao
+        nova = crua_da_versao(w, plano, int(opts["versao"]), refaz=True)
+        if nova is None:
+            print("erro: não consegui gerar a imagem da versão", file=sys.stderr)
+            return 1
+        bruta = nova
+    # A TAGLINE vem do plano quando existe (o planejador escreve), e a linha de
+    # comando vence — é assim que se experimenta sem replanejar.
+    tagline = opts.get("tagline") or plano["capa"].get("tagline", "")
+    versao = int(opts["versao"]) if str(opts.get("versao", "")).isdigit() else None
+    # UMA capa por versão quando o selo é pedido: as duas faixas do Suno viram
+    # dois clipes, e capa sem marca faz escolher no chute.
+    saida = w / (f"capa-v{versao}.png" if versao else "capa.png")
+    try:
+        destino = compor(bruta, titulo, plano["capa"].get("paleta"),
+                         plano["capa"].get("template", ""), saida,
+                         tagline=tagline, versao=versao)
+    except ArteError as e:
+        print(f"erro: {e}", file=sys.stderr)
+        return 1
+    print(f"capa: {destino}")
+    return 0
+
+
+def _cmd_recorta(args) -> int:
+    """Dá RITMO a um clipe já gerado — sem gerar nada, sem custo.
+
+    Os shots já estão no disco; o que muda é quanto de cada um entra. O clipe
+    velho fica intacto: o novo sai num slug irmão, para comparar lado a lado.
+    """
+    import json
+    import os
+    import sys
+    from src.montagem import montar_todas
+    from src.planner import _parse_opts
+    from src.recorte import INTENSIDADE, RecorteError, recortar
+    livres, opts = _parse_opts(args)
+    if not livres:
+        print("uso: recorta <slug> [--ritmo variado|dinamico|calmo]", file=sys.stderr)
+        return 1
+    w = out_dir() / livres[0]
+    shots = sorted((w / "raw").glob("shot-*.mp4"))
+    if not shots:
+        print(f"erro: sem shots em {w / 'raw'} — o recorte reaproveita o que já foi gerado",
+              file=sys.stderr)
+        return 1
+    try:
+        plano = json.loads((w / "plano.json").read_text(encoding="utf-8"))
+        secoes = [x.get("secao", "") for x in plano["clipe"]["decupagem"]]
+    except (OSError, json.JSONDecodeError, KeyError):
+        secoes = [""] * len(shots)
+    if len(secoes) < len(shots):        # shot sem seção declarada entra na média
+        secoes += [""] * (len(shots) - len(secoes))
+    ritmo = str(opts.get("ritmo") or "variado").lower()
+    if ritmo not in INTENSIDADE:
+        print(f"erro: ritmo '{ritmo}' não vale aqui (use: "
+              f"{', '.join(INTENSIDADE)})", file=sys.stderr)
+        return 1
+    destino = out_dir() / f"{livres[0]}-{ritmo}"
+    (destino / "raw").mkdir(parents=True, exist_ok=True)
+    try:
+        meta = recortar(shots, secoes[:len(shots)], destino / "raw" / "clipe-sem-musica.mp4",
+                        INTENSIDADE[ritmo])
+    except RecorteError as e:
+        print(f"erro: {e}", file=sys.stderr)
+        return 1
+    for f in list(w.glob("faixa-*.mp3")) + [w / "capa.png"]:
+        if f.exists() and not (destino / f.name).exists():
+            try:
+                os.link(f, destino / f.name)
+            except OSError:
+                import shutil
+                shutil.copy2(f, destino / f.name)
+    print(f"recorte: {meta['shots']} shots · {meta['encurtados']} encurtados, "
+          f"{meta['em_slowmo']} em slowmo · planos de {meta['menor_s']:g}s a "
+          f"{meta['maior_s']:g}s · {meta['cortes_por_minuto']:g} cortes/min "
+          f"({meta['duracao_antes_s']:g}s → {meta['duracao_depois_s']:g}s)")
+    try:
+        mm = montar_todas(destino, destino / "raw" / "clipe-sem-musica.mp4")
+        print(f"clipe com música: {destino / mm['principal']} "
+              f"({mm['duracao_final_s']}s) · US$ 0, nada foi gerado")
+    except Exception as e:                # sem faixa: o vídeo mudo já vale
+        print(f"(sem montar a música: {e})")
+    return 0
+
+
+def _cmd_curto(args) -> int:
+    """O Short: 12s verticais tirados do clipe que JÁ existe. Não gera nada."""
+    import json
+    import sys
+    from src.montagem import faixas_existentes
+    from src.nucleo import nucleo_de, recortar_vertical, NucleoError
+    from src.planner import _parse_opts
+    livres, opts = _parse_opts(args)
+    if not livres:
+        print("uso: curto <slug> [--inicio N]", file=sys.stderr)
+        return 1
+    w = out_dir() / livres[0]
+    clipe = w / "clipe.mp4"
+    if not clipe.exists():
+        print(f"erro: {clipe} não existe — o Short sai do clipe pronto", file=sys.stderr)
+        return 1
+    if opts.get("inicio") is not None:
+        inicio = float(opts["inicio"])
+    else:
+        arq = w / "nucleo.json"
+        try:
+            if arq.exists():
+                inicio = json.loads(arq.read_text(encoding="utf-8"))["inicio_s"]
+            else:
+                faixas = faixas_existentes(w)
+                if not faixas:
+                    print("erro: sem faixa para medir o núcleo — use --inicio N", file=sys.stderr)
+                    return 1
+                inicio = nucleo_de(faixas[0])["inicio_s"]
+        except (NucleoError, KeyError, json.JSONDecodeError) as e:
+            print(f"erro: não deu para achar o núcleo ({e}) — use --inicio N", file=sys.stderr)
+            return 1
+    try:
+        alvo = recortar_vertical(clipe, w / "curto.mp4", inicio)
+    except NucleoError as e:
+        print(f"erro: {e}", file=sys.stderr)
+        return 1
+    print(f"curto: {alvo} (de {inicio:g}s a {inicio + 12:g}s, 1080x1920) · US$ 0, sem render")
+    return 0
+
+
+def _cmd_nuvem(args) -> int:
+    """Aprova (ou cancela) a subida de uma produção, do terminal.
+
+    O gesto normal é o botão no painel; isto existe para roteiro e para o
+    primeiro carregamento, onde marcar 30 produções a mão não faz sentido.
+    """
+    from src.mvd import resolver
+    from src.nuvem import aprovar, situacao
+    if not args:
+        print("uso: nuvem <slug|MVD-014|--todos> [--cancela]", file=sys.stderr)
+        return 1
+    cancela = "--cancela" in args
+    alvos = [a for a in args if not a.startswith("--")]
+    base = out_dir()
+    if "--todos" in args:
+        # Só produção de verdade: com clipe montado e capa pronta. Pasta de
+        # teste fica local — é decisão do plano do V2, não filtro de ocasião.
+        alvos = [w.name for w in sorted(p for p in base.iterdir() if p.is_dir())
+                 if (w / "estado.json").exists() and list(w.glob("clipe*.mp4"))
+                 and (w / "capa.png").exists()]
+    for a in alvos:
+        slug = resolver(base, a)
+        if not slug:
+            print(f"não achei '{a}'", file=sys.stderr)
+            continue
+        print(f"{slug}: {aprovar(base / slug, not cancela)}")
+    return 0
+
+
+def _cmd_publica_hf(args) -> int:
+    """Sobe o acervo aprovado para o Hugging Face e reescreve o manifesto."""
+    from src.publicahf import REPO_PADRAO, publicar
+    dry = "--dry" in args
+    alvos = [a for a in args if not a.startswith("--")]
+    repo = REPO_PADRAO
+    if "--repo" in args:
+        repo = args[args.index("--repo") + 1]
+        alvos = [a for a in alvos if a != repo]
+    try:
+        publicar(out_dir(), repo, alvos or None, dry=dry,
+                 so_manifesto="--manifesto" in args)
+    except (RuntimeError, OSError) as e:
+        print(f"erro: {e}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def _cmd_likes(args) -> int:
+    """Traz as curtidas da vitrine para o painel local. Fecha o ciclo."""
+    from src.publicahf import baixar_likes
+    base = args[0] if args else None
+    d = baixar_likes(out_dir(), base)
+    if not d:
+        print("sem likes — falta MUSICAVIDEO_PUB_URL (ou a vitrine não respondeu)",
+              file=sys.stderr)
+        return 1
+    for mvd, n in sorted(d.items(), key=lambda kv: -kv[1])[:10]:
+        print(f"{mvd}: {n}")
+    return 0
+
+
+COMANDOS.update({"nuvem": _cmd_nuvem, "publica-hf": _cmd_publica_hf, "likes": _cmd_likes})
+COMANDOS.update({"lista": _cmd_lista, "busca": _cmd_busca, "reindex": _cmd_reindex,
+                 "plano": _cmd_plano, "ver": _cmd_ver, "ok": _cmd_ok, "ajusta": _cmd_ajusta,
+                 "faz": _cmd_faz, "custo": _cmd_custo, "tudo": _cmd_tudo,
+                 "monta": _cmd_monta, "revisa": _cmd_revisa,
+                 "aprova": _cmd_aprova, "reprova": _cmd_reprova,
+                 "recorta": _cmd_recorta, "curto": _cmd_curto, "pacote": _cmd_pacote, "arte": _cmd_arte, "painel": _cmd_painel})
+
+
+def main(argv: list[str]) -> int:
+    # `-h`/`--help` em QUALQUER posição só imprime. Cada `_cmd_*` faz o próprio
+    # parsing solto (`"--x" in args`) e ignora flag que não conhece — então
+    # `publica-hf --help` chegava ao dispatch como um `publica-hf` sem alvo e
+    # começava a subir 4 GB. Pedir ajuda nunca pode executar.
+    if not argv or any(a in ("-h", "--help", "-help", "ajuda") for a in argv):
+        print(USO)
+        return 1
+    cmd = argv[0]
+    fn = COMANDOS.get(cmd)
+    if fn is None:
+        print(f"comando desconhecido: {cmd}\n{USO}", file=sys.stderr)
+        return 1
+    return fn(argv[1:])
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

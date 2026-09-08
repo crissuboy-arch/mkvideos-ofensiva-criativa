@@ -104,3 +104,14 @@
 - Padronizar a **saída** (`renders/<nome>.mp4`) entre todos, pra uma biblioteca única.
 - Estender a fila para aceitar mais tipos (`pixflow`, `remotion`, `mdd→gerador IA`).
 - UI "Biblioteca de vídeos": listar/preview/mover/publicar os `.mp4` de todas as fontes.
+
+## Atualização — 2026-09-01: URL → Vídeo (content2video) integrado como módulo
+
+O `mkivideos` (este repo) ganhou uma segunda entrada além de "assunto" (`gerar`):
+**URL → Vídeo**, via o motor `Content2Video INEMA` vendorizado em
+`modules/content2video/` e exposto como um `VideoEngine` plugável
+(`src/engines/`). Diferente da fila `/mkivideos` (skills via `claude -p`), esse
+fluxo usa Codex CLI/OpenAI para pesquisar a URL e escrever roteiro/cenas, com
+gate de aprovação visual antes de produzir. Ver `docs/url-para-video.md` e
+`docs/arquitetura-motores.md` (arquitetura preparada para outros
+motores/provedores — Kling, Veo, Runway, HeyGen, Sora — ainda não implementados).

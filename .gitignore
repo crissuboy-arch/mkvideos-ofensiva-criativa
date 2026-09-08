@@ -18,6 +18,25 @@ renders/
 
 # pastas de output
 Videos/
+output/
+.runtime/
+
+# motor content2video (módulo): saídas e runtime locais — nunca versionar
+modules/content2video/output/
+modules/content2video/.runtime/
+modules/content2video/node_modules/
+modules/content2video/.env
+modules/content2video/.env.*
+
+# dados locais dos módulos (Música + Videoclipe / Otimizar Vídeo / Legendar)
+.mkvideos-data/
+modules/musicavideo/__pycache__/
+modules/musicavideo/**/__pycache__/
+modules/otimizevideo/__pycache__/
+modules/otimizevideo/**/__pycache__/
+modules/**/.env
+modules/**/.env.*
+!modules/**/env.example.reference
 
 # configuração local e segredos
 .env
