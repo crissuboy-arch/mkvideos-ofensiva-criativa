@@ -38,7 +38,19 @@ npm link        # disponibiliza `mkivideos` no PATH
 ### Dependências de mídia (locais, sem API)
 
 - **FFmpeg** no PATH — `winget install Gyan.FFmpeg` (Windows). Verifique: `ffmpeg -version` e `ffprobe -version`.
-- **HyperFrames + Kokoro** rodam via `npx` na primeira execução (baixa Chrome headless + modelo TTS).
+- **HyperFrames** roda via `npx` na primeira execução (baixa o Chrome headless).
+- **Kokoro TTS (voz offline)** — o HyperFrames chama o `python` do sistema e exige os
+  pacotes **`kokoro-onnx`** e **`soundfile`** instalados nele. **Não são baixados
+  automaticamente.** Instale uma vez:
+
+  ```bash
+  python -m pip install kokoro-onnx soundfile
+  ```
+
+  Confirme: `python -c "import kokoro_onnx, soundfile; print('Kokoro OK')"`.
+  Sem isso, `mkivideos gerar` falha na fase de narração
+  (*"The kokoro-onnx package is not installed"*). O modelo de voz (~27 MB) é
+  baixado na primeira síntese. `mkivideos doctor` verifica esses pacotes.
 - **Fontes** (Sora / Inter / JetBrains Mono): copiadas da skill `video-explicativo` se instalada, ou baixadas por `fetch-fonts.mjs`.
 
 ---

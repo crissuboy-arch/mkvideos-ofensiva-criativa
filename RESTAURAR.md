@@ -83,18 +83,23 @@ claude login
 
 ---
 
-## 5. Configurar Kokoro TTS
+## 5. Configurar Kokoro TTS (voz offline) — OBRIGATÓRIO para `mkivideos gerar`
 
-O TTS roda via HyperFrames — sem instalação extra necessária.
-Testar:
+O TTS roda via HyperFrames, mas o HyperFrames **chama o `python` do sistema** e
+**exige** os pacotes `kokoro-onnx` e `soundfile` instalados nele. **Eles NÃO são
+baixados automaticamente.** Sem eles, `mkivideos gerar` falha na fase de narração
+com *"The kokoro-onnx package is not installed"*.
+
+```bash
+python -m pip install kokoro-onnx soundfile
+python -c "import kokoro_onnx, soundfile; print('Kokoro OK')"
+```
+
+Use o **mesmo** `python` que está no PATH (o que `mkivideos doctor` reporta).
+Testar a síntese (baixa o modelo de voz ~27 MB na primeira vez):
 
 ```bash
 npx hyperframes@0.6.80 tts "Teste de voz" --voice pf_dora --output teste.wav
-```
-
-Se quiser o módulo Python direto:
-```bash
-pip install kokoro-onnx soundfile
 ```
 
 ---

@@ -80,6 +80,21 @@ export async function runDoctor(env: NodeJS.ProcessEnv = process.env): Promise<D
     });
   }
 
+  // Voz offline: o TTS Kokoro (via HyperFrames) precisa dos pacotes Python
+  // `kokoro-onnx` + `soundfile` no MESMO `python` que o HyperFrames chama.
+  // Sem eles, `mkivideos gerar` falha na fase de narração.
+  const pyTts = process.platform === 'win32' ? 'python' : 'python3';
+  const kokoro = await tryExec(pyTts, ['-c', '"import kokoro_onnx, soundfile"']);
+  add({
+    name: 'Kokoro TTS (voz offline)',
+    group: 'mídia',
+    required: true,
+    ok: kokoro.ok,
+    detail: kokoro.ok
+      ? `pacotes Python kokoro-onnx + soundfile OK (${pyTts})`
+      : `AUSENTE — geração offline de voz NÃO está pronta. Instale: ${pyTts} -m pip install kokoro-onnx soundfile`,
+  });
+
   // ── IA (só para URL → Vídeo) ──────────────────────────────────────────────
   const provider = (env.AI_PROVIDER || 'codex').toLowerCase();
   if (provider === 'openai') {
