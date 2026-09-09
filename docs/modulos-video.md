@@ -39,6 +39,27 @@ MKVideos **preserva esses gates** e **nunca** usa `--aprovar` (que os pularia).
 `faz` é a única ação que gasta e exige, além do portão `ok`, a confirmação
 `--autorizo-gasto`/`confirm:true`.
 
+> ### Status de validação (2026-09-09)
+>
+> **MÚSICA — ⚠️ funcionalidade existente, mas requer provedor externo.**
+> O planejador (`plano`) requer o **Claude CLI** no PATH
+> (`planner.py::chamar_fable` → `claude -p`). A geração musical em si só existe
+> via **`kie:suno-v4.5` (Suno), que é paga** (~US$0,08/geração) — não há
+> provedor local/offline/grátis nem mock de música neste módulo. **Não validada
+> em produção nesta rodada** (sem Claude CLI, sem `KIE_API_KEY`).
+>
+> **VIDEOCLIPE / CAPA — ⚠️ funcionalidade existente, mas requer provedor
+> externo.** Mesmo bloqueio de `plano` (Claude CLI). O default `agnes:*` tem
+> custo US$0 mas é **API externa** (`apihub.agnes-ai.com`) e exige
+> `AGNES_API_KEY` + rede — **não é local**. `inemaimg` é um servidor local
+> (`localhost:8000`) de infra específica, não roda por padrão. Provedores pagos
+> (`kling`/`fal`) permanecem opcionais. **Não validada em produção nesta rodada.**
+>
+> Isto **não é bug pendente do núcleo local** do MKVideos — a Geração offline
+> (`gerar`), o Legendar e o Otimizar já foram validados E2E sem API paga. É a
+> natureza do `musicavideo`: 100% orientado a provedores externos por design.
+> O `doctor` reporta o Claude CLI e as chaves ausentes.
+
 - **Motores** (do plano, trocáveis por `--motor parte=prov:modelo`):
   - música: `kie:suno-v4.5` — **pago, ~US$0,08** (traz 2 faixas). Único pago por default.
   - capa: `agnes:agnes-image-2.1-flash` — **US$0**. Alternativa local: `inemaimg:flux2-klein`.

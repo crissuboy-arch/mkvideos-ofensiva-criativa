@@ -33,5 +33,5 @@ describe('doctor', () => {
     expect(names).toContain('modules/content2video');
     expect(names).toContain('Whisper local (Otimizar)');
     expect(typeof r.ok).toBe('boolean');
-  }, 20_000);
+  }, 45_000); // runDoctor faz muitos spawns reais (inclui `import whisper`, que puxa o torch)
 });

@@ -140,6 +140,19 @@ export async function runDoctor(env: NodeJS.ProcessEnv = process.env): Promise<D
     add({ name: 'Codex CLI', group: 'IA', required: false, ok: ready, detail });
   }
 
+  // Claude CLI — o planejador do "Música + Videoclipe" (planner.py::chamar_fable)
+  // spawna `claude -p`. Sem ele, `mkivideos musicavideo plano` falha de cara.
+  const claude = await tryExec('claude', ['--version']);
+  add({
+    name: 'Claude CLI (Música + Videoclipe)',
+    group: 'IA',
+    required: false,
+    ok: claude.ok,
+    detail: claude.ok
+      ? `${firstLine(claude.out)} — o planejador de Música + Videoclipe usa \`claude -p\``
+      : 'ausente — `mkivideos musicavideo plano` precisa do Claude Code no PATH (npm i -g @anthropic-ai/claude-code + claude login)',
+  });
+
   // ── motor content2video ──────────────────────────────────────────────────
   const root = moduleRoot();
   const hasServer = existsSync(path.join(root, 'app', 'server.mjs'));

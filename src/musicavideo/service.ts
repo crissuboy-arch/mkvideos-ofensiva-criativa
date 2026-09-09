@@ -40,7 +40,12 @@ export class MusicavideoService {
     }
     return runTool(py, [path.join(root, 'src', 'main.py'), ...args], {
       cwd: root,
-      env: { ...this.env, ...envSubset(this.env, MUSICAVIDEO_ENV_KEYS), MUSICAVIDEO_OUT: outDir(this.env) },
+      // PYTHONUTF8=1: erros/mensagens do CLI têm acento; no Windows o console é
+      // cp1252 e o texto sai ilegível (ou o `print` chega a quebrar). Força UTF-8.
+      env: {
+        PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8',
+        ...this.env, ...envSubset(this.env, MUSICAVIDEO_ENV_KEYS), MUSICAVIDEO_OUT: outDir(this.env),
+      },
       timeoutMs: 20 * 60_000,
     });
   }

@@ -37,6 +37,20 @@ export async function runMusicavideoCli(args: string[]): Promise<string> {
   const [sub, ...rest] = args;
   if (!sub) return musicavideoUsage();
 
+  // Um subprocesso do musicavideo que retorna code != 0 (erro do Python, crash,
+  // dependência ausente) NUNCA pode ser reportado como sucesso. Lança → cli.ts
+  // imprime "❌ …" e sai com código 1. Referência: src/legendas/service.ts.
+  const out = (r: { code: number; stdout: string; stderr: string }): string => {
+    if (r.code !== 0) {
+      const detalhe = [r.stderr, r.stdout].map((s) => (s ?? '').trim()).filter(Boolean).join('\n').slice(0, 2000);
+      throw new Error(
+        `musicavideo "${sub}" falhou (código ${r.code})`
+        + (detalhe ? `:\n${detalhe}` : ' — o processo não deixou saída (provável crash).'),
+      );
+    }
+    return r.stdout || r.stderr;
+  };
+
   try {
     switch (sub) {
       case 'plano': {
@@ -48,7 +62,7 @@ export async function runMusicavideoCli(args: string[]): Promise<string> {
           estilo: optVal(rest, '--estilo'), idioma: optVal(rest, '--idioma'),
           ritmo: optVal(rest, '--ritmo') as never, forca: rest.includes('--forca'),
         });
-        return r.stdout || r.stderr;
+        return out(r);
       }
       case 'ver': {
         const [slug, parte] = rest;
@@ -63,13 +77,13 @@ export async function runMusicavideoCli(args: string[]): Promise<string> {
         const [slug, parte, ...instrTokens] = rest;
         if (!slug || !isParte(parte) || !instrTokens.length) return 'uso: ajusta <slug> <parte> "<instrução>"';
         const r = await svc.ajusta(slug, parte, instrTokens.join(' ').replace(/^["']|["']$/g, ''), rest.includes('--refaz'));
-        return r.stdout || r.stderr;
+        return out(r);
       }
       case 'ok': {
         const [slug, parte] = rest;
         if (!slug || !isParte(parte)) return 'uso: ok <slug> <parte>';
         const r = await svc.ok(slug, parte);
-        return r.stdout || r.stderr;
+        return out(r);
       }
       case 'custo': {
         const [slug] = rest;
@@ -89,32 +103,32 @@ export async function runMusicavideoCli(args: string[]): Promise<string> {
           }
         }
         const r = await svc.faz({ slug, partes, confirmado, semRevisao: rest.includes('--sem-revisao') });
-        return r.stdout || r.stderr;
+        return out(r);
       }
       case 'revisa': {
         const [slug, parte] = rest;
         if (!slug) return 'informe o slug.';
         const r = await svc.revisa(slug, isParte(parte) ? parte : undefined);
-        return r.stdout || r.stderr;
+        return out(r);
       }
       case 'aprova': {
         const [slug, parte] = rest;
         if (!slug || !isParte(parte)) return 'uso: aprova <slug> <parte> [--faixa 1|2]';
         const faixaStr = optVal(rest, '--faixa');
         const r = await svc.aprova(slug, parte, faixaStr === '1' ? 1 : faixaStr === '2' ? 2 : undefined);
-        return r.stdout || r.stderr;
+        return out(r);
       }
       case 'reprova': {
         const [slug, parte, shots] = rest;
         if (!slug || !isParte(parte)) return 'uso: reprova <slug> <parte> ["4,17,23"]';
         const r = await svc.reprova(slug, parte, shots);
-        return r.stdout || r.stderr;
+        return out(r);
       }
       case 'pacote': {
         const [slug] = rest;
         if (!slug) return 'informe o slug.';
         const r = await svc.pacote(slug);
-        return r.stdout || r.stderr;
+        return out(r);
       }
       case 'lista':
         return svc.indice(rest[0] ? Number(rest[0]) : 10)
