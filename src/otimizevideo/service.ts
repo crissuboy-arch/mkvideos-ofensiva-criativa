@@ -53,7 +53,10 @@ export class OtimizevideoService {
     // então precisa vir ANTES do subcomando: `otv --config X ingest <fonte>`.
     return runTool(py, [path.join(root, 'otv.py'), '--config', cfg, ...args], {
       cwd: root,
-      env: { ...this.env, ...envSubset(this.env, OTV_ENV_KEYS) },
+      // PYTHONUTF8=1: o otv.py imprime marcas Unicode (✔/✗) no status e lê/escreve
+      // JSON com acento — no Windows o locale é cp1252 e isso quebrava tanto o
+      // `print()` quanto o I/O de arquivo. Força UTF-8 no processo filho inteiro.
+      env: { PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8', ...this.env, ...envSubset(this.env, OTV_ENV_KEYS) },
       timeoutMs: 40 * 60_000,
     });
   }

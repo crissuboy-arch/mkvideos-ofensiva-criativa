@@ -14,10 +14,10 @@ export function otimizevideoUsage(): string {
     'mkivideos otimizevideo — Otimizar Vídeo (motor: otimizevideo/otv)',
     '',
     '  mkivideos otimizevideo ingest <url-ou-arquivo>',
-    '  mkivideos otimizevideo transcrever <id> [--provedor groq|whisper_local] [--autorizo-gasto]',
+    '  mkivideos otimizevideo transcrever <id> [--provedor whisper_local|groq] [--autorizo-gasto]   # default: whisper_local (offline)',
     '  mkivideos otimizevideo cenas <id>                    # local, grátis',
     '  mkivideos otimizevideo classificar <id> [--provedor glm|gemini|claude_cli] [--autorizo-gasto]',
-    '  mkivideos otimizevideo pontuar <id> [--modo A|B|C|N] [--alvo 120] [--provedor glm|ollama|claude_cli] [--autorizo-gasto]',
+    '  mkivideos otimizevideo pontuar <id> [--modo A|B|C|N] [--alvo 120] [--provedor local_heuristic|glm|gemini|ollama|claude_cli]   # default: local_heuristic (offline, heurística)',
     '  mkivideos otimizevideo selecionar <id> [--modo A] [--alvo 120]     # grátis, refaz sempre',
     '  mkivideos otimizevideo render <id> [--rapido]                      # grátis, usa o plan.json atual',
     '  mkivideos otimizevideo narrar <id> [--provedor inemavox|elevenlabs] [--autorizo-gasto]',
@@ -25,6 +25,8 @@ export function otimizevideoUsage(): string {
     '',
     'O LLM nunca escolhe timestamps. selecionar/render/narrar(inemavox) não pagam LLM',
     '— dá para re-cortar e re-renderizar quantas vezes quiser sem gastar de novo.',
+    'Pipeline 100% offline (custo US$ 0): ingest → transcrever (whisper_local) → cenas',
+    '→ pontuar (local_heuristic) → selecionar → render.',
   ].join('\n');
 }
 
@@ -37,8 +39,19 @@ export async function runOtimizevideoCli(args: string[]): Promise<string> {
   const modo = (optVal(rest, '--modo') ?? 'A') as ModoOtv;
   const alvo = optVal(rest, '--alvo') ? Number(optVal(rest, '--alvo')) : undefined;
   const forcar = rest.includes('--forcar');
-  const out = (r: { stdout: string; stderr: string; id?: string }): string =>
-    (r.id ? `id: ${r.id}\n` : '') + (r.stdout || r.stderr);
+  // Uma fase que retorna code != 0 (inclui crash nativo do Python, ex.: segfault
+  // por falta de memória → runTool devolve code≠0 + stderr) NUNCA pode ser
+  // apresentada como concluída. Lança → cli.ts imprime "❌ …" e sai com código 1.
+  const out = (r: { code?: number; stdout: string; stderr: string; id?: string }): string => {
+    if (r.code !== undefined && r.code !== 0) {
+      const detalhe = [r.stderr, r.stdout].map((s) => (s ?? '').trim()).filter(Boolean).join('\n').slice(0, 2000);
+      throw new Error(
+        `fase "${sub}" falhou (código ${r.code})`
+        + (detalhe ? `:\n${detalhe}` : ' — o processo não deixou saída (provável crash; confira a memória disponível).'),
+      );
+    }
+    return (r.id ? `id: ${r.id}\n` : '') + (r.stdout || r.stderr);
+  };
 
   try {
     switch (sub) {
@@ -48,7 +61,8 @@ export async function runOtimizevideoCli(args: string[]): Promise<string> {
       }
       case 'transcrever':
         if (!id) return 'informe o id.';
-        return out(await svc.transcrever(id, optVal(rest, '--provedor') ?? 'groq', confirmed, forcar));
+        // default offline: whisper local (o modelo é escolhido com segurança por RAM — ver config.ts).
+        return out(await svc.transcrever(id, optVal(rest, '--provedor') ?? 'whisper_local', confirmed, forcar));
       case 'cenas':
         if (!id) return 'informe o id.';
         return out(await svc.cenasLocais(id, forcar));
@@ -57,7 +71,8 @@ export async function runOtimizevideoCli(args: string[]): Promise<string> {
         return out(await svc.classificarCenas(id, optVal(rest, '--provedor') ?? 'glm', confirmed, forcar));
       case 'pontuar':
         if (!id) return 'informe o id.';
-        return out(await svc.pontuar(id, modo, optVal(rest, '--provedor') ?? 'glm', confirmed, alvo, forcar));
+        // default offline: pontuação heurística local (determinística, sem LLM, sem custo).
+        return out(await svc.pontuar(id, modo, optVal(rest, '--provedor') ?? 'local_heuristic', confirmed, alvo, forcar));
       case 'selecionar':
         if (!id) return 'informe o id.';
         return out(await svc.selecionar(id, modo, alvo));

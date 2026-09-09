@@ -40,12 +40,26 @@ export async function runTool(cmd: string, args: string[], opts: RunToolOptions)
     });
     return { code: 0, stdout, stderr };
   } catch (e) {
-    const err = e as NodeJS.ErrnoException & { code?: number | string; stdout?: string; stderr?: string };
+    const err = e as NodeJS.ErrnoException & {
+      code?: number | string; signal?: string; stdout?: string; stderr?: string;
+    };
     if (err.code === 'ENOENT') {
       throw new LocalToolError(`comando "${cmd}" não encontrado no PATH.`, {});
     }
-    const code = typeof err.code === 'number' ? err.code : 1;
-    return { code, stdout: err.stdout ?? '', stderr: err.stderr ?? err.message };
+    const numeric = typeof err.code === 'number' ? err.code : undefined;
+    const code = numeric ?? 1;
+    // Processo que morre por sinal (SIGSEGV) ou com código de exceção do Windows
+    // (ex.: 0xC0000005 = 3221225477, access violation) não deixa stderr. Sem esta
+    // mensagem a falha "some": '' é string (não cai no ?? de quem consome) e o
+    // chamador vê stdout/stderr vazios como se o comando não tivesse dito nada.
+    const crashed = Boolean(err.signal) || (numeric !== undefined && (numeric > 128 || numeric < 0));
+    const stderr = (err.stderr && err.stderr.trim())
+      ? err.stderr
+      : crashed
+        ? `processo terminou anormalmente (${err.signal ? `sinal ${err.signal}` : `código ${numeric}`}) `
+          + `sem nenhuma saída — causa provável: crash nativo (ex.: memória insuficiente).`
+        : (err.stdout && err.stdout.trim()) ? err.stdout : err.message;
+    return { code, stdout: err.stdout ?? '', stderr };
   }
 }
 

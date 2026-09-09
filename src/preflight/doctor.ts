@@ -3,10 +3,12 @@
 
 import { exec } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 
 import { moduleRoot } from '../engines/content2video/config.js';
+import { safeWhisperModel } from '../otimizevideo/config.js';
 
 export interface Check {
   name: string;
@@ -93,6 +95,27 @@ export async function runDoctor(env: NodeJS.ProcessEnv = process.env): Promise<D
     detail: kokoro.ok
       ? `pacotes Python kokoro-onnx + soundfile OK (${pyTts})`
       : `AUSENTE — geração offline de voz NÃO está pronta. Instale: ${pyTts} -m pip install kokoro-onnx soundfile`,
+  });
+
+  // Whisper local — transcrição offline do fluxo "Otimizar" (e opção do "Legendar").
+  // O modelo é escolhido com segurança pela RAM (turbo estoura máquina apertada e o
+  // torch/Windows *segfaulta* em vez de erro claro); MKIVIDEOS_WHISPER_MODEL sobrescreve.
+  // `import whisper` puxa o torch — cold start passa de 5 s; timeout maior.
+  const whisper = await tryExec(pyTts, ['-c', '"import whisper"'], 30_000);
+  const wModel = safeWhisperModel(env);
+  const totalGiB = Math.round((os.totalmem() / 1024 ** 3) * 10) / 10;
+  const wSource = env.MKIVIDEOS_WHISPER_MODEL?.trim() ? 'MKIVIDEOS_WHISPER_MODEL' : `auto (RAM total ${totalGiB} GiB)`;
+  const turboRisco = wModel === 'turbo' && totalGiB < 12;
+  add({
+    name: 'Whisper local (Otimizar)',
+    group: 'mídia',
+    required: false,
+    ok: whisper.ok && !turboRisco,
+    detail: !whisper.ok
+      ? `pacote Python "whisper" ausente (${pyTts}) — transcrição offline do Otimizar indisponível. Instale: ${pyTts} -m pip install -U openai-whisper`
+      : turboRisco
+        ? `modelo "turbo" selecionado com só ${totalGiB} GiB de RAM — risco de crash (segfault). Defina MKIVIDEOS_WHISPER_MODEL=base`
+        : `modelo "${wModel}" (${wSource}) · pacote whisper OK (${pyTts})`,
   });
 
   // ── IA (só para URL → Vídeo) ──────────────────────────────────────────────

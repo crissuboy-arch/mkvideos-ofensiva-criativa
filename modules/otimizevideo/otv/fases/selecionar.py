@@ -128,15 +128,16 @@ def selecionar(dir, cfg, modo="A", alvo_s=None, forcar=True):
     dir = Path(dir); out = dir / "plan.json"
     if out.exists() and not forcar:
         return out
-    us = json.loads((dir / "unidades.json").read_text())["unidades"]
-    notas = json.loads((dir / "notas.json").read_text())
-    cenas = json.loads((dir / "scenes.json").read_text())["cenas"] if (dir / "scenes.json").exists() else []
+    # [MKVIDEOS PATCH] I/O de JSON em UTF-8 explícito (não depende do locale do SO).
+    us = json.loads((dir / "unidades.json").read_text(encoding="utf-8"))["unidades"]
+    notas = json.loads((dir / "notas.json").read_text(encoding="utf-8"))
+    cenas = json.loads((dir / "scenes.json").read_text(encoding="utf-8"))["cenas"] if (dir / "scenes.json").exists() else []
     alvo = alvo_s or cfg["selecao"]["alvo_s"]
     if VISUAL_MODO[modo] and not any(u.get("visual") in VISUAL_MODO[modo] for u in us):
         raise RuntimeError(f"nenhuma unidade com visual {sorted(VISUAL_MODO[modo])} — vídeo é só talking head? use modo A ou rode 'otv cenas --classificar'")
     plan = selecionar_plan(us, notas, cenas, cfg["selecao"], modo, alvo)
     if plan["total_s"] < 0.5 * alvo:
         print(f"aviso: só {plan['total_s']}s selecionados de {alvo}s — considere baixar selecao.nota_minima")
-    out.write_text(json.dumps(plan, ensure_ascii=False, indent=1))
+    out.write_text(json.dumps(plan, ensure_ascii=False, indent=1), encoding="utf-8")  # [MKVIDEOS PATCH] UTF-8 explícito
     registrar(dir, "selecionar", {"modo": modo, "alvo_s": alvo, "total_s": plan["total_s"], "segmentos": len(plan["segmentos"])})
     return out

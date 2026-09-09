@@ -78,13 +78,14 @@ def unidades(dir, cfg, forcar=False):
     dir = Path(dir); out = dir / "unidades.json"
     if out.exists() and not forcar:
         return out
-    t = json.loads((dir / "transcript.json").read_text())
+    # [MKVIDEOS PATCH] I/O de JSON em UTF-8 explícito (não depende do locale do SO).
+    t = json.loads((dir / "transcript.json").read_text(encoding="utf-8"))
     us = montar_unidades(t["palavras"], t.get("fins_segmento", []),
                          pausa_s=cfg["selecao"]["pausa_fronteira_ms"] / 1000,
                          max_dur_s=cfg["selecao"]["max_unidade_s"])
     sc = dir / "scenes.json"
     if sc.exists():
-        atribuir_cenas(us, json.loads(sc.read_text())["cenas"])
-    out.write_text(json.dumps({"unidades": us}, ensure_ascii=False))
+        atribuir_cenas(us, json.loads(sc.read_text(encoding="utf-8"))["cenas"])
+    out.write_text(json.dumps({"unidades": us}, ensure_ascii=False), encoding="utf-8")
     registrar(dir, "unidades", {"quantidade": len(us), "media_s": round(sum(u["dur"] for u in us) / max(1, len(us)), 2)})
     return out

@@ -160,7 +160,7 @@ def render(dir, cfg, rapido=False, sem_audio_original=None):
     dos valores `in`/`out` do plan.json). Não usar quando precisão de corte importa. Os
     dois caminhos não se misturam: --rapido não desenha manchete nem mixa narração.
     """
-    dir = Path(dir); plan = json.loads((dir / "plan.json").read_text()); segs = plan["segmentos"]
+    dir = Path(dir); plan = json.loads((dir / "plan.json").read_text(encoding="utf-8")); segs = plan["segmentos"]  # [MKVIDEOS PATCH] UTF-8
     out = dir / "output.mp4"; t0 = time.time()
     if not segs:
         raise RuntimeError("plan.json sem segmentos")
@@ -212,7 +212,7 @@ def render(dir, cfg, rapido=False, sem_audio_original=None):
                 "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", str(out)]
         run(cmd)
     concatenar_cta(out, cfg, tamanho if not rapido else None, abertura=dir / "abertura.mp4")
-    vid = json.loads((dir / "metadata.json").read_text()).get("id", dir.name)
+    vid = json.loads((dir / "metadata.json").read_text(encoding="utf-8")).get("id", dir.name)  # [MKVIDEOS PATCH] UTF-8
     dest = Path(cfg["saida"]).expanduser() / vid; dest.mkdir(parents=True, exist_ok=True)
     for f in ("output.mp4", "plan.json", "notas.json", "unidades.json", "custos.json"):
         if (dir / f).exists():
