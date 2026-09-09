@@ -28,7 +28,7 @@ def ingest(fonte, raiz, forcar=False):
         os.replace(tmp_audio, audio)
     meta_path = d / "metadata.json"
     if meta_path.exists() and not forcar:
-        titulo = json.loads(meta_path.read_text()).get("titulo") or Path(fonte).stem
+        titulo = json.loads(meta_path.read_text(encoding="utf-8")).get("titulo") or Path(fonte).stem  # [MKVIDEOS PATCH] UTF-8 explícito
     else:
         titulo = Path(fonte).stem
         if fonte.startswith("http"):
@@ -38,6 +38,6 @@ def ingest(fonte, raiz, forcar=False):
                 pass
     meta = {"id": d.name, "fonte": fonte, "titulo": titulo, **probe(video),
             "criado_em": time.strftime("%Y-%m-%dT%H:%M:%S")}
-    meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=1))
+    meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")  # [MKVIDEOS PATCH] UTF-8 explícito (título pode ter acento)
     registrar(d, "ingest", {"segundos": round(time.time() - t0, 1)})
     return d
