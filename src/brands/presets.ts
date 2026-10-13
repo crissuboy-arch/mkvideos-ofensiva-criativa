@@ -9,7 +9,7 @@ const FONTS = { title: 'Sora', body: 'Inter', mono: 'JetBrains Mono' } as const;
 export const ofensivaCriativa: Brand = {
   id: 'ofensiva-criativa',
   name: 'OFENSIVA CRIATIVA',
-  tagline: 'Marketing Sem Filtro',
+  tagline: 'Marketing Digital sem Filtros',
   slogan: 'Ajudo marcas a incomodarem a concorrência',
   instagram: '@ofensivacriativa',
   site: 'links.ofensivacriativa.com',
