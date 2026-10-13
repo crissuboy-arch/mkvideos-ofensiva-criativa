@@ -15,6 +15,9 @@ import { hfLint, hfInspect, hfRender } from '../render/hyperframes.js';
 import { generateAudioScene, resolveVozDir } from '../audio/tts.js';
 import { generateBgMusic } from '../audio/music.js';
 import { ffprobeDuration } from '../audio/probe.js';
+import { bestHook } from '../yt/hooks.js';
+import { editDecisionList } from '../yt/cuts.js';
+import { runOmTool } from '../om/bridge.js';
 
 export interface BuildRequest {
   titulo: string;
@@ -29,17 +32,23 @@ export interface BuildRequest {
   tts_speed?: number;      // default 1.1
   imagens_dir?: string;    // pasta com cena1.png … cenaN.png
   voz?: string;            // nome/caminho da pasta de voz
+  hooks?: string[];        // ganchos candidatos (fase 'ganchos' escolhe o melhor)
+  srtPath?: string;        // transcrição p/ lista de cortes (fase 'cortes')
 }
 
+/** Resultado estendido com os artefactos das fases opcionais. */
 export interface BuildResult {
   mp4: string;
   duration: number;
   projectDir: string;
   format: 'vertical' | 'horizontal';
+  hook?: { hook: string; score: number; verdict: string };
+  edl?: string;            // caminho do JSON da lista de cortes
+  posMp4?: string;         // mp4 pós-processado (fase 'pos')
 }
 
 /** Fases emitidas durante o build (para painéis/UX acompanharem o progresso). */
-export type BuildPhase = 'roteiro' | 'narracao' | 'musica' | 'composicao' | 'render' | 'movendo';
+export type BuildPhase = 'roteiro' | 'ganchos' | 'narracao' | 'musica' | 'composicao' | 'render' | 'cortes' | 'pos' | 'movendo';
 
 export interface BuildHooks {
   onProgress?: (phase: BuildPhase) => void;
@@ -67,6 +76,22 @@ export async function buildVideo(req: BuildRequest, hooks: BuildHooks = {}): Pro
   const vertical = script.format === 'vertical';
   emit('roteiro');
   console.log(`[mkivideos] "${req.titulo}" · ${script.tipo} · ${script.format} · marca ${brand.id} · ${script.scenes.length} cenas`);
+
+  // ── 1b. ganchos (opt-in MKV_HOOKS=1): pontua candidatos ANTES do TTS ────────
+  let hookEscolhido: BuildResult['hook'];
+  if (process.env.MKV_HOOKS === '1' && req.hooks?.length) {
+    emit('ganchos');
+    try {
+      const best = await bestHook(req.hooks);
+      if (best && script.scenes.length) {
+        script.scenes[0].narration = best.hook;
+        hookEscolhido = { hook: best.hook, score: best.score, verdict: best.verdict };
+        console.log(`[mkivideos] gancho escolhido (nota ${best.score}): ${best.hook.slice(0, 70)}…`);
+      }
+    } catch (e) {
+      console.warn('[ganchos] falhou (segue sem pontuar):', (e as Error).message.slice(0, 160));
+    }
+  }
 
   // ── 2. projeto temporário ──────────────────────────────────────────────────
   const slug = req.titulo.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'video';
@@ -164,18 +189,51 @@ export async function buildVideo(req: BuildRequest, hooks: BuildHooks = {}): Pro
   const duration = await ffprobeDuration(renderOut);
   console.log(`[mkivideos] pronto: ${renderOut} (${duration.toFixed(1)}s)`);
 
+  // ── 9b. cortes (opt-in MKV_CUTS=1): EDL a partir do SRT (não toca no vídeo) ─
+  let edlPath: string | undefined;
+  if (process.env.MKV_CUTS === '1' && req.srtPath) {
+    emit('cortes');
+    try {
+      const edl = await editDecisionList(req.srtPath);
+      edlPath = path.join(projectDir, 'renders', `${outSlug}-cortes.json`);
+      writeFileSync(edlPath, JSON.stringify(edl, null, 1), 'utf-8');
+      console.log(`[mkivideos] EDL: ${edl.cuts.length} cortes, -${edl.removed.toFixed(1)}s → ${edlPath}`);
+    } catch (e) {
+      console.warn('[cortes] falhou (segue sem EDL):', (e as Error).message.slice(0, 160));
+    }
+  }
+
+  // ── 9c. pos (opt-in MKV_OM_POS=1): ferramenta OpenMontage local/gratuita ────
+  // Falha aberta: se a ferramenta falhar, mantém o mp4 original.
+  let posMp4: string | undefined;
+  if (process.env.MKV_OM_POS === '1') {
+    emit('pos');
+    try {
+      const out = path.join(projectDir, 'renders', `${outSlug}-pos.mp4`);
+      const res = await runOmTool('silence_cutter', { input_path: renderOut, output_path: out, mode: 'remove' });
+      const artefato = res.artifacts[0];
+      if (artefato && existsSync(artefato)) {
+        posMp4 = artefato;
+        console.log(`[mkivideos] pos: silence_cutter OK (${(res.data['time_saved_percent'] as number) ?? '?'}% mais curto)`);
+      }
+    } catch (e) {
+      console.warn('[pos] falhou (mantém original):', (e as Error).message.slice(0, 160));
+    }
+  }
+
   // ── 10. move para o destino ────────────────────────────────────────────────
   emit('movendo');
-  let finalPath = renderOut;
+  const fonteFinal = posMp4 ?? renderOut;
+  let finalPath = fonteFinal;
   if (req.output) {
     const isFile = req.output.toLowerCase().endsWith('.mp4');
     const destDir = isFile ? path.dirname(req.output) : req.output;
     mkdirSync(destDir, { recursive: true });
-    finalPath = isFile ? req.output : path.join(req.output, path.basename(renderOut));
-    try { renameSync(renderOut, finalPath); }
-    catch { copyFileSync(renderOut, finalPath); }
+    finalPath = isFile ? req.output : path.join(req.output, path.basename(fonteFinal));
+    try { renameSync(fonteFinal, finalPath); }
+    catch { copyFileSync(fonteFinal, finalPath); }
     console.log(`[mkivideos] movido para ${finalPath}`);
   }
 
-  return { mp4: finalPath, duration, projectDir, format: script.format };
+  return { mp4: finalPath, duration, projectDir, format: script.format, hook: hookEscolhido, edl: edlPath, posMp4 };
 }
