@@ -16,11 +16,12 @@ export type ProviderId =
   | 'hyperframes'   // ativo — composição programável (motion graphics)
   | 'local-media'   // planejado — mídia enviada/selecionada pelo usuário
   | 'image-gen'     // planejado — geração + animação de imagem
-  | 'avatar'        // planejado — apresentador/avatar (ex.: HeyGen)
+  | 'avatar'        // ativo — LongCat-Video-Avatar 1.5 (lip-sync local; HeyGen API segue como alternativa futura)
   | 'kling'         // planejado — clipe IA
   | 'veo'           // planejado — clipe IA
   | 'runway'        // planejado — clipe IA
-  | 'sora';         // planejado — clipe IA
+  | 'sora'          // planejado — clipe IA
+  | 'longcat';      // ativo — LongCat-Video (clipe IA local; ponte de clip pendente de PoC em GPU)
 
 export type ProviderKind = 'composition' | 'clip' | 'avatar' | 'image' | 'media';
 

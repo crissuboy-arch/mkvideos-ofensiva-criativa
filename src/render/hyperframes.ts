@@ -5,18 +5,31 @@ import { promisify } from 'node:util';
 
 const run = promisify(execFile);
 const NPX = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-const HF = 'hyperframes@0.6.80';
+/**
+ * Versão do pacote npm `hyperframes` (heygen-com, Apache-2.0).
+ * Default 0.6.80 = versão provada neste pipeline. Para testar versões novas
+ * (ex.: 0.8.x), defina HYPERFRAMES_VERSION no .env — sem trocar o default
+ * sem um render de validação. npm latest em 2026-10-18: 0.8.172.
+ */
+export const HYPERFRAMES_PKG = `hyperframes@${process.env.HYPERFRAMES_VERSION || '0.6.80'}`;
+const HF = HYPERFRAMES_PKG;
 const isWin = process.platform === 'win32';
 
 export interface RunOpts {
   maxBuffer?: number;
   /** Mata o processo e rejeita se passar do tempo (evita render pendurado pra sempre). */
   timeoutMs?: number;
+  /**
+   * Sonda rápida: `npx --no-install` falha de imediato se o pacote não estiver
+   * em cache, em vez de baixar. Ideal para health checks (não para renders).
+   */
+  noInstall?: boolean;
 }
 
 /** Roda `hyperframes <cmd…>` em cwd e devolve stdout+stderr. */
 export async function runHyperframes(cmd: string[], cwd: string, opts: RunOpts = {}): Promise<string> {
-  const { stdout, stderr } = await run(NPX, [HF, ...cmd], {
+  const pkg = opts.noInstall ? ['--no-install', HF] : [HF];
+  const { stdout, stderr } = await run(NPX, [...pkg, ...cmd], {
     cwd,
     maxBuffer: opts.maxBuffer ?? 10 * 1024 * 1024,
     shell: isWin,
@@ -24,6 +37,13 @@ export async function runHyperframes(cmd: string[], cwd: string, opts: RunOpts =
     killSignal: 'SIGKILL',
   });
   return stdout + stderr;
+}
+
+/** Devolve a versão instalada/resolvida (`hyperframes --version`).
+ * Sonda rápida: não baixa o pacote; falha se não estiver em cache. */
+export async function hfVersion(cwd: string): Promise<string> {
+  const out = await runHyperframes(['--version'], cwd, { timeoutMs: 30_000, noInstall: true });
+  return out.trim();
 }
 
 export async function hfInit(cwd: string): Promise<string> {

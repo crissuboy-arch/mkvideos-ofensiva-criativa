@@ -1,11 +1,14 @@
 // Provedor ATIVO: composição programável via HyperFrames.
 //
-// Hoje o HyperFrames é acionado *dentro* do motor content2video (que monta a
-// timeline, anima, valida e renderiza). Este objeto existe para a UI listar o
-// provider ativo e para futuras integrações "por cena" usarem o mesmo contrato.
-// A geração direta cena-a-cena por aqui ainda não é usada pelo fluxo URL → Vídeo.
+// Pacote npm `hyperframes` (heygen-com, Apache-2.0): "Write HTML. Render video."
+// Hoje é acionado *dentro* do motor content2video (que monta a timeline, anima,
+// valida e renderiza) e pelos wrappers em src/render/hyperframes.ts.
+// Este objeto existe para a UI listar o provider ativo e para futuras
+// integrações "por cena" usarem o mesmo contrato. A geração direta cena-a-cena
+// por aqui ainda não é usada pelo fluxo URL → Vídeo.
 
 import { EngineNotImplementedError } from '../types.js';
+import { HYPERFRAMES_PKG, hfVersion } from '../../render/hyperframes.js';
 import type { MediaProvider, ProviderHealth, ProviderId, ProviderKind, SceneMediaRequest, SceneMediaResult } from './types.js';
 
 export class HyperframesProvider implements MediaProvider {
@@ -15,7 +18,13 @@ export class HyperframesProvider implements MediaProvider {
   readonly implemented = true;
 
   async health(): Promise<ProviderHealth> {
-    return { id: this.id, available: true, message: 'Acionado pelo motor content2video (via npx hyperframes).' };
+    try {
+      const v = await hfVersion(process.cwd());
+      return { id: this.id, available: true, message: `HyperFrames OK (${HYPERFRAMES_PKG}; ${v.split('\n')[0]}).` };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return { id: this.id, available: false, message: `HyperFrames indisponível: ${msg}` };
+    }
   }
 
   async generate(_req: SceneMediaRequest): Promise<SceneMediaResult> {

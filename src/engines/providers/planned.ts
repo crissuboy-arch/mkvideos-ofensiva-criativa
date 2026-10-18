@@ -24,11 +24,10 @@ class Sora extends PlannedProvider {
   readonly kind: ProviderKind = 'clip';
   readonly label = 'Sora (clipe IA)';
 }
-class HeyGenAvatar extends PlannedProvider {
-  readonly id: ProviderId = 'avatar';
-  readonly kind: ProviderKind = 'avatar';
-  readonly label = 'HeyGen / apresentador (avatar)';
-}
+// NOTA (2026-10-18): o slot `avatar` foi ocupado pelo LongCat-Video-Avatar 1.5
+// (MIT, local, sem custo por crédito). A API do HeyGen segue como alternativa
+// futura — se for priorizada, entra com id próprio (ex.: 'heygen'), sem colidir.
+
 class ImageGen extends PlannedProvider {
   readonly id: ProviderId = 'image-gen';
   readonly kind: ProviderKind = 'image';
@@ -45,7 +44,6 @@ export const PLANNED_PROVIDERS = [
   new Veo(),
   new Runway(),
   new Sora(),
-  new HeyGenAvatar(),
   new ImageGen(),
   new LocalMedia(),
 ] as const;

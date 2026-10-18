@@ -4,16 +4,17 @@ import { listProviders, getProvider, implementedProviderIds, plannedProviderIds 
 import { EngineNotImplementedError } from '../types.js';
 
 describe('providers de mídia', () => {
-  it('só hyperframes é implementado hoje', () => {
-    expect(implementedProviderIds()).toEqual(['hyperframes']);
+  it('hyperframes, avatar (LongCat) e longcat são os implementados', () => {
+    expect(implementedProviderIds()).toEqual(['hyperframes', 'avatar', 'longcat']);
   });
 
   it('os provedores futuros estão listados mas não implementados', () => {
     const planned = plannedProviderIds();
-    for (const id of ['kling', 'veo', 'runway', 'sora', 'avatar', 'image-gen', 'local-media'] as const) {
+    for (const id of ['kling', 'veo', 'runway', 'sora', 'image-gen', 'local-media'] as const) {
       expect(planned).toContain(id);
       expect(getProvider(id).implemented).toBe(false);
     }
+    expect(planned).not.toContain('avatar');
   });
 
   it('generate() de um provedor planejado lança NOT_IMPLEMENTED', async () => {
