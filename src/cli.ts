@@ -3,6 +3,7 @@
 // Build → dist/cli.js (bin "mkivideos"). Uso: `mkivideos <add|fila|cancelar|run>`.
 
 import path from 'node:path';
+import fs from 'node:fs';
 
 import { loadEnv } from './env.js';
 import { initVideoQueue } from './queue.js';
@@ -101,6 +102,41 @@ function main(): void {
     case 'add':
       console.log(cmdAdd(store, rest.join(' ')));
       break;
+
+    case 'athena-receive': {
+      // Recebe um envelope de missão ATHENA (ContratoPonteV1, JSON) via stdin
+      // ou ficheiro: `mkivideos athena-receive < missao.json`
+      const raw = rest[0] && !rest[0].startsWith('--')
+        ? fs.readFileSync(rest[0], 'utf8')
+        : fs.readFileSync(0, 'utf8');
+      import('./athena/adapter.js')
+        .then(({ receiveMission }) => {
+          const r = receiveMission(store, JSON.parse(raw));
+          console.log(JSON.stringify({ ok: true, job_id: r.jobId, deduped: r.deduped }));
+          store.close();
+        })
+        .catch((e) => {
+          console.error(JSON.stringify({ ok: false, error: (e as Error).message }));
+          process.exitCode = 1;
+        });
+      return; // async — não fecha store aqui
+    }
+
+    case 'athena-status': {
+      // Poll do resultado: `mkivideos athena-status --mission <mission_id>`
+      const missionId = optVal(rest, '--mission');
+      import('./athena/adapter.js')
+        .then(({ missionStatus }) => {
+          if (!missionId) throw new Error('uso: mkivideos athena-status --mission <mission_id>');
+          console.log(JSON.stringify(missionStatus(store, missionId)));
+          store.close();
+        })
+        .catch((e) => {
+          console.error(JSON.stringify({ ok: false, error: (e as Error).message }));
+          process.exitCode = 1;
+        });
+      return; // async — não fecha store aqui
+    }
 
     case 'fila':
       console.log(cmdFila(store));
