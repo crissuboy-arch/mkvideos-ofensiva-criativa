@@ -21,6 +21,7 @@ import { runOtimizevideoCli } from './otimizevideo/cli.js';
 import { runLegendasCli } from './legendas/cli.js';
 import { stopEngineProcess } from './engines/content2video/process.js';
 import { runDoctor, formatDoctor } from './preflight/doctor.js';
+import { runMptCli } from './mpt/cli.js';
 import { scanLibrary } from './biblioteca/index.js';
 
 loadEnv();
@@ -52,6 +53,7 @@ function main(): void {
     musicavideo: runMusicavideoCli,
     otimizevideo: runOtimizevideoCli,
     legendas: runLegendasCli,
+    mpt: runMptCli,
   };
   if (cmd && modCli[cmd]) {
     void modCli[cmd](rest)

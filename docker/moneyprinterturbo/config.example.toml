@@ -1,0 +1,42 @@
+# MoneyPrinterTurbo — config do motor isolado (SÓ EXEMPLO).
+#
+# Copiar para config.toml (ignorado pelo git, nunca commitar) e definir uma
+# api_key real:
+#   cp config.example.toml config.toml
+# A chave abaixo é um placeholder, não uma credencial. O upstream lê a
+# chave SÓ do config.toml (não do ambiente); chave vazia deixa a API sem
+# autenticação — o motor do MKVideos exige sempre chave.
+#
+# Esta config é para um motor isolado em loopback. NÃO é um deploy de
+# produção e NÃO regista executor nenhum na ATHENA.
+
+log_level = "INFO"
+listen_host = "127.0.0.1"
+listen_port = 8080
+
+[app]
+# OBRIGATÓRIO para o motor do MKVideos: o cliente envia este mesmo valor
+# no cabeçalho x-api-key. Gerar localmente; nunca commitar o config.toml.
+api_key = "TROCAR-POR-CHAVE-GERADA-LOCALMENTE"
+
+# Fila pequena e isolada: 2 concorrentes, 20 em espera (os defaults do
+# upstream são 5 e 100). Fila cheia responde HTTP 429; o cliente nunca reenvia.
+max_concurrent_tasks = 2
+max_queued_tasks = 20
+
+# Materiais locais: nenhuma chave de stock é precisa para o teste PT-BR.
+video_source = "local"
+
+# Legendas a partir dos limites de palavra do Edge TTS (sem modelo Whisper).
+# Para testes locais neste VM (onde o Edge TTS falha no proxy), sobrepor
+# para "whisper" com modelo tiny local — ver o guião de teste em
+# research_notes/mkvideos-mpt-engine/test-video/.
+subtitle_provider = "edge"
+
+# Timeout de pedido Edge TTS (segundos); 0 desativa o timeout.
+edge_tts_timeout = 30
+
+[ui]
+# Voz PT-BR por omissão para o teste isolado (voz Edge listada no upstream).
+voice_name = "pt-BR-FranciscaNeural"
+subtitle_enabled = true

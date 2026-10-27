@@ -129,6 +129,7 @@ export function usage(): string {
     '  mkivideos musicavideo <...>                 # Música + Videoclipe (gera com portões; nunca gasta sem --autorizo-gasto)',
     '  mkivideos otimizevideo <...>                # Otimizar Vídeo (corte inteligente, fase por fase)',
     '  mkivideos legendas <...>                    # transcrever/revisar/queimar legenda em um vídeo',
+    '  mkivideos mpt gerar --subject "<tema>"     # MoneyPrinterTurbo (tema → vídeo faceless)',
     '  mkivideos biblioteca                        # lista tudo que já foi produzido localmente',
     '  mkivideos doctor                            # verifica Node, Python, FFmpeg, Codex, chaves e os módulos',
     '',

@@ -21,6 +21,10 @@ Videos/
 output/
 .runtime/
 
+# motor moneyprinterturbo isolado: config real e storage — nunca versionar
+docker/moneyprinterturbo/config.toml
+docker/moneyprinterturbo/storage/
+
 # motor content2video (módulo): saídas e runtime locais — nunca versionar
 modules/content2video/output/
 modules/content2video/.runtime/

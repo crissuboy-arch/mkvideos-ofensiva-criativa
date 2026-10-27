@@ -6,10 +6,13 @@
 // tudo pelo painel/CLI com a identidade visual do MKVideos.
 //
 // Motor atual: `content2video` (URL → Vídeo, via Codex + HyperFrames + Edge TTS).
+// Motor adicional: `moneyprinterturbo` (tema/roteiro → vídeo faceless, via API
+// do motor isolado; sem gate visual, sem projetos, sem editor — ver
+// src/engines/moneyprinterturbo/). O default continua 'content2video'.
 // Arquitetura preparada para outros motores/provedores (Kling, Veo, Runway,
 // HeyGen, Sora, geração de imagem, avatar, mídia local) — ver src/engines/providers.
 
-export type EngineId = 'content2video';
+export type EngineId = 'content2video' | 'moneyprinterturbo';
 
 /** Proporção de tela pedida pelo usuário. */
 export type AspectRatio = '9:16' | '16:9';

@@ -1,0 +1,24 @@
+# MoneyPrinterTurbo — motor isolado para o MKVideos (NÃO é um deploy de produção).
+#
+# Uso (num anfitrião com Docker, autorizado à parte):
+#   cp config.example.toml config.toml   # definir uma api_key real primeiro
+#   docker compose up -d --build api
+#
+# A API liga-se só a 127.0.0.1. O MKVideos fala com ela por
+# MPT_API_BASE_URL=http://127.0.0.1:8080 e MPT_API_KEY=<a mesma chave>.
+# config.toml e storage/ estão no .gitignore e nunca devem ser commitados.
+# Nenhuma publicação automática em redes sociais é configurada.
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: moneyprinterturbo-mkvideos-isolated
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./config.toml:/data/config.toml:ro
+      - ./storage:/data/storage
+    environment:
+      MPT_HOME: /data
+    restart: unless-stopped

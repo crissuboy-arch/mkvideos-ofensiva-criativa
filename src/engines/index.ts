@@ -1,6 +1,7 @@
 // Barrel da camada de motores. Importar este módulo registra os motores disponíveis.
 
 import './content2video/index.js';
+import './moneyprinterturbo/index.js';
 
 export * from './types.js';
 export { getEngine, engineIds, registerEngine } from './registry.js';
