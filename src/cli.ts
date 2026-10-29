@@ -19,6 +19,7 @@ import { runUrl2VideoCli } from './url2video/cli.js';
 import { runMusicavideoCli } from './musicavideo/cli.js';
 import { runOtimizevideoCli } from './otimizevideo/cli.js';
 import { runLegendasCli } from './legendas/cli.js';
+import { runDiariaCli } from './diaria/cli.js';
 import { stopEngineProcess } from './engines/content2video/process.js';
 import { runDoctor, formatDoctor } from './preflight/doctor.js';
 import { scanLibrary } from './biblioteca/index.js';
@@ -52,6 +53,7 @@ function main(): void {
     musicavideo: runMusicavideoCli,
     otimizevideo: runOtimizevideoCli,
     legendas: runLegendasCli,
+    diaria: runDiariaCli,
   };
   if (cmd && modCli[cmd]) {
     void modCli[cmd](rest)

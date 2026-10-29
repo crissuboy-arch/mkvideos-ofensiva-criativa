@@ -133,3 +133,12 @@ export type { LibraryItem, LibrarySource } from './biblioteca/index.js';
 // ── helpers de ferramentas locais ────────────────────────────────────────
 export { runTool, resolvePython, LocalToolError } from './localtools/exec.js';
 export { dataRoot, moduleDataDir } from './localtools/datadir.js';
+
+// ── diária (Fase 1: coleta + portão de roteiro, sem vídeo) ──────────────
+export { coletarTop10, coletarEEditar, escreverEdicao, montarTop10, modoTeste, nomePastaEdicao } from './diaria/coleta.js';
+export { fichaDeTop10, textoFalado, escreverFicha, lerFicha, lerTop10 } from './diaria/ficha.js';
+export { validarFicha } from './diaria/portao.js';
+export { runDiariaCli, diariaUsage } from './diaria/cli.js';
+export { hackerNewsAdapter, coletarHackerNews, casaFiltro, PALAVRAS_CHAVE } from './diaria/fontes/hackernews.js';
+export type { ItemBruto, TopItem, Top10, Ficha, FichaItem, FonteAdapter, HttpGet, GateResult } from './diaria/types.js';
+export type { FichaBase } from './diaria/ficha.js';
