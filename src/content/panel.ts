@@ -4,8 +4,10 @@
 // (scheduler) publica os agendados vencidos.
 
 import http from 'node:http';
+import { createReadStream, existsSync, statSync } from 'node:fs';
 
 import type { SqliteContentStore } from './store.js';
+import { createScalaflowHandler, type ScalaflowHandler } from './scalaflow-routes.js';
 import { ymd } from './store.js';
 import type { ContentItem, ContentStatus, ContentInput, ContentPatch, BatchVariation } from './types.js';
 import {
@@ -29,6 +31,8 @@ export interface PanelOptions {
   url2video?: Url2VideoService;
   /** Habilita as abas Música + Videoclipe / Otimizar Vídeo / Legendar / Biblioteca. */
   hub?: boolean;
+  /** Chave da API do ScalaFlow (env MKVIDEOS_API_KEY). Sem ela, a API não existe. */
+  scalaflowApiKey?: string;
 }
 
 function readJson(req: http.IncomingMessage): Promise<Record<string, unknown>> {
@@ -58,6 +62,9 @@ function sanitizeInput(b: Record<string, unknown>): ContentInput | null {
     publish_time: str(b.publish_time),
     timezone: str(b.timezone) ?? DEFAULT_TZ,
     marca: str(b.marca),
+    roteiro: typeof b.roteiro === 'string' && b.roteiro.trim() ? b.roteiro.slice(0, 20000) : null,
+    imagens_dir: str(b.imagens_dir),
+    voz: str(b.voz),
     status: isStatus(String(b.status)) ? (b.status as ContentStatus) : 'ideia',
   };
 }
@@ -70,9 +77,10 @@ function sanitizePatch(b: Record<string, unknown>): ContentPatch {
   if (isLanguage(String(b.idioma))) p.idioma = b.idioma as ContentPatch['idioma'];
   if (isStatus(String(b.status))) p.status = b.status as ContentStatus;
   if ('account_id' in b) p.account_id = num(b.account_id);
-  for (const k of ['produto', 'publish_date', 'publish_time', 'timezone', 'marca'] as const) {
+  for (const k of ['produto', 'publish_date', 'publish_time', 'timezone', 'marca', 'imagens_dir', 'voz'] as const) {
     if (k in b) p[k] = str(b[k]);
   }
+  if ('roteiro' in b) p.roteiro = typeof b.roteiro === 'string' && b.roteiro.trim() ? b.roteiro.slice(0, 20000) : null;
   return p;
 }
 
@@ -85,10 +93,43 @@ export function createPanelServer(store: SqliteContentStore, opts: PanelOptions 
   const token = opts.token ?? '';
   let generating: number | null = null;
 
+  /** Arranca a geração de um item (uma de cada vez). Usado pelo painel e pela API do ScalaFlow. */
+  function startItemGeneration(id: number): 'ok' | 'notfound' | 'noconfig' | 'busy' {
+    const item = store.get(id);
+    if (!item) return 'notfound';
+    if (!opts.generate) return 'noconfig';
+    if (generating !== null) return 'busy';
+    generating = id;
+    store.update(id, { status: 'gerando', error: null });
+    store.logEvent(id, 'geracao', 'iniciada');
+    const onPhase = (s: ContentStatus): void => {
+      store.update(id, { status: s });
+      if (s === 'renderizando') store.logEvent(id, 'renderizacao', 'render iniciado');
+    };
+    opts.generate(item, { onPhase })
+      .then((videoPath) => { store.update(id, { status: 'pronto', video_path: videoPath, error: null }); store.logEvent(id, 'renderizacao', `pronto: ${videoPath}`); })
+      .catch((e) => { const msg = String((e as Error).message || e).slice(0, 300); store.update(id, { status: 'roteiro', error: msg }); store.logEvent(id, 'erro', msg); })
+      .finally(() => { generating = null; scalaflow?.notifyIdle(); });
+    return 'ok';
+  }
+
+  const scalaflow: ScalaflowHandler | null = opts.scalaflowApiKey
+    ? createScalaflowHandler({
+        store,
+        apiKey: opts.scalaflowApiKey,
+        tryStartGeneration: (id) => startItemGeneration(id) === 'ok',
+      })
+    : null;
+
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url || '/', 'http://localhost');
     const { pathname } = url;
     const m = req.method || 'GET';
+
+    // API do ScalaFlow tem autenticação própria (Bearer) — antes do token do painel.
+    if (scalaflow && pathname.startsWith('/api/scalaflow/')) {
+      if (await scalaflow.handle(req, res, url)) return;
+    }
 
     if (token && url.searchParams.get('token') !== token) return json(res, 401, { error: 'Unauthorized' });
 
@@ -196,25 +237,24 @@ export function createPanelServer(store: SqliteContentStore, opts: PanelOptions 
 
     const idGer = pathname.match(/^\/api\/items\/(\d+)\/gerar$/);
     if (m === 'POST' && idGer) {
-      const id = Number(idGer[1]);
-      const item = store.get(id);
-      if (!item) return json(res, 404, { error: 'não existe' });
-      if (!opts.generate) return json(res, 501, { error: 'geração não configurada' });
-      if (generating !== null) return json(res, 409, { error: 'ocupado', busy: generating });
+      const r = startItemGeneration(Number(idGer[1]));
+      if (r === 'notfound') return json(res, 404, { error: 'não existe' });
+      if (r === 'noconfig') return json(res, 501, { error: 'geração não configurada' });
+      if (r === 'busy') return json(res, 409, { error: 'ocupado', busy: generating });
+      return json(res, 202, { ok: true });
+    }
 
-      generating = id;
-      store.update(id, { status: 'gerando', error: null });
-      store.logEvent(id, 'geracao', 'iniciada');
-      json(res, 202, { ok: true });
-
-      const onPhase = (s: ContentStatus): void => {
-        store.update(id, { status: s });
-        if (s === 'renderizando') store.logEvent(id, 'renderizacao', 'render iniciado');
-      };
-      opts.generate(item, { onPhase })
-        .then((videoPath) => { store.update(id, { status: 'pronto', video_path: videoPath, error: null }); store.logEvent(id, 'renderizacao', `pronto: ${videoPath}`); })
-        .catch((e) => { const msg = String((e as Error).message || e).slice(0, 300); store.update(id, { status: 'roteiro', error: msg }); store.logEvent(id, 'erro', msg); })
-        .finally(() => { generating = null; });
+    const idVideo = pathname.match(/^\/api\/items\/(\d+)\/video$/);
+    if (m === 'GET' && idVideo) {
+      const item = store.get(Number(idVideo[1]));
+      if (!item?.video_path || !existsSync(item.video_path)) return json(res, 404, { error: 'sem vídeo' });
+      const dl = url.searchParams.get('dl') === '1';
+      res.writeHead(200, {
+        'Content-Type': 'video/mp4',
+        'Content-Length': statSync(item.video_path).size,
+        ...(dl ? { 'Content-Disposition': `attachment; filename="mkivideos-${item.id}.mp4"` } : {}),
+      });
+      createReadStream(item.video_path).pipe(res);
       return;
     }
 
@@ -297,6 +337,11 @@ export function getPanelHtml(token = '', feat: { url2video?: boolean; hub?: bool
     <label>Timezone<input id="f-tz" size="14"></label>
     <label>Marca<select id="f-marca"></select></label>
     <button onclick="criar()">+ Adicionar</button>
+  </div>
+  <div class="row" style="margin-top:6px">
+    <label style="flex:1;min-width:280px">Roteiro próprio (opcional — um parágrafo por cena)<textarea id="f-roteiro" rows="3" placeholder="Cole aqui o roteiro, ou deixe vazio e o motor gera a partir do tema"></textarea></label>
+    <label>Pasta de imagens<input id="f-imagens" size="24" placeholder="pasta com cena1.png, cena2.png…"></label>
+    <label>Voz<input id="f-voz" size="14" placeholder="(vazio = Kokoro)"></label>
   </div></fieldset>
 
   <fieldset><legend>Filtros (biblioteca)</legend><div class="row">
@@ -407,7 +452,7 @@ async function loadLib(){
   const {items,generating}=await r.json();
   document.getElementById('busy').textContent=generating?('⏳ gerando #'+generating+'…'):'';
   const rows=items.map(it=>{
-    const vid=it.video_path?'<a href="#" title="'+esc(it.video_path)+'">✔</a>':(it.error?'<span class="muted" title="'+esc(it.error)+'">erro</span>':'—');
+    const vid=it.video_path?'<a href="/api/items/'+it.id+'/video'+qs+'" target="_blank" title="'+esc(it.video_path)+'">▶ Ver</a> <a href="/api/items/'+it.id+'/video'+qs+sep+'dl=1">⬇ MP4</a>':(it.error?'<span class="muted" title="'+esc(it.error)+'">erro</span>':'—');
     const ger=(it.status==='ideia'||it.status==='roteiro')?'<button class="go" onclick="gerar('+it.id+')">Gerar</button>':'';
     const ag=(it.status==='pronto')?'<button class="ag" onclick="agendar('+it.id+')">Agendar</button>':'';
     return '<tr><td>'+(esc(it.publish_date)||'—')+'</td><td>'+(esc(it.publish_time)||'')+'</td><td>#'+it.id+' '+esc(it.tema)+'</td>'
@@ -468,11 +513,12 @@ async function loadLogs(){
 const v=id=>document.getElementById(id).value;
 async function criar(){
   const body={tema:v('f-tema'),tipo:v('f-tipo'),plataforma:v('f-plataforma'),idioma:v('f-idioma'),account_id:v('f-account'),
-    produto:v('f-produto'),publish_date:v('f-date'),publish_time:v('f-time'),timezone:v('f-tz'),marca:v('f-marca')};
+    produto:v('f-produto'),publish_date:v('f-date'),publish_time:v('f-time'),timezone:v('f-tz'),marca:v('f-marca'),
+    roteiro:v('f-roteiro'),imagens_dir:v('f-imagens'),voz:v('f-voz')};
   if(!body.tema){alert('Informe o tema');return;}
   const r=await api('/api/items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   if(r.error){alert(r.error);return;}
-  document.getElementById('f-tema').value='';document.getElementById('f-produto').value='';
+  document.getElementById('f-tema').value='';document.getElementById('f-produto').value='';document.getElementById('f-roteiro').value='';
   load();
 }
 async function setStatus(id,status){await api('/api/items/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})});load();}

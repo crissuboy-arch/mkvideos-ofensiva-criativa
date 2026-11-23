@@ -13,6 +13,7 @@ import { SqliteContentStore, DEFAULT_ACCOUNTS } from './content/store.js';
 import { createPanelServer } from './content/panel.js';
 import { startScheduler } from './content/scheduler.js';
 import { platformFormat } from './content/types.js';
+import { roteiroParaCenas } from './content/roteiro.js';
 import { buildVideo } from './engine/pipeline.js';
 import { url2video } from './url2video/service.js';
 import { runUrl2VideoCli } from './url2video/cli.js';
@@ -130,9 +131,13 @@ function main(): void {
             marca: item.marca ?? undefined,
             vertical: fmt === 'vertical',
             horizontal: fmt === 'horizontal',
+            scenes: item.roteiro ? roteiroParaCenas(item.roteiro) : undefined,
+            imagens_dir: item.imagens_dir ?? undefined,
+            voz: item.voz ?? undefined,
           }, { onProgress: (ph) => onPhase(ph === 'render' || ph === 'movendo' ? 'renderizando' : 'gerando') });
           return r.mp4;
         },
+        scalaflowApiKey: process.env.MKVIDEOS_API_KEY || undefined,
       });
       const sched = startScheduler(content, { intervalMs: 60_000 });
       void sched; // worker publica os agendados vencidos (mock) a cada minuto

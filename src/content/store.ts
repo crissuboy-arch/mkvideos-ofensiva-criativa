@@ -23,6 +23,9 @@ const SCHEMA = `
     timezone     TEXT,
     status       TEXT NOT NULL DEFAULT 'ideia',
     marca        TEXT,
+    roteiro      TEXT,
+    imagens_dir  TEXT,
+    voz          TEXT,
     video_path   TEXT,
     error        TEXT,
     created_at   INTEGER NOT NULL,
@@ -54,7 +57,8 @@ const now = (): number => Math.floor(Date.now() / 1000);
 
 const UPDATABLE = [
   'tema', 'tipo', 'plataforma', 'idioma', 'produto', 'account_id',
-  'publish_date', 'publish_time', 'timezone', 'status', 'marca', 'video_path', 'error',
+  'publish_date', 'publish_time', 'timezone', 'status', 'marca', 'roteiro',
+  'imagens_dir', 'voz', 'video_path', 'error',
 ] as const;
 
 const p2 = (n: number): string => String(n).padStart(2, '0');
@@ -98,6 +102,7 @@ export class SqliteContentStore {
     );
     const add: [string, string][] = [
       ['account_id', 'INTEGER'], ['timezone', 'TEXT'],
+      ['roteiro', 'TEXT'], ['imagens_dir', 'TEXT'], ['voz', 'TEXT'],
     ];
     for (const [name, decl] of add) {
       if (!cols.has(name)) this.db.exec(`ALTER TABLE content_items ADD COLUMN ${name} ${decl}`);
@@ -110,8 +115,8 @@ export class SqliteContentStore {
     const t = now();
     const r = this.db.prepare(
       `INSERT INTO content_items
-        (tema, tipo, plataforma, idioma, produto, account_id, publish_date, publish_time, timezone, status, marca, created_at, updated_at)
-       VALUES (@tema,@tipo,@plataforma,@idioma,@produto,@account_id,@publish_date,@publish_time,@timezone,@status,@marca,@t,@t)`,
+        (tema, tipo, plataforma, idioma, produto, account_id, publish_date, publish_time, timezone, status, marca, roteiro, imagens_dir, voz, created_at, updated_at)
+       VALUES (@tema,@tipo,@plataforma,@idioma,@produto,@account_id,@publish_date,@publish_time,@timezone,@status,@marca,@roteiro,@imagens_dir,@voz,@t,@t)`,
     ).run({
       tema: input.tema,
       tipo: input.tipo ?? 'explicativo',
@@ -124,6 +129,9 @@ export class SqliteContentStore {
       timezone: input.timezone ?? null,
       status: input.status ?? 'ideia',
       marca: input.marca ?? null,
+      roteiro: input.roteiro ?? null,
+      imagens_dir: input.imagens_dir ?? null,
+      voz: input.voz ?? null,
       t,
     });
     return Number(r.lastInsertRowid);
@@ -199,6 +207,9 @@ export class SqliteContentStore {
         publish_time: base.publish_time,
         timezone: base.timezone,
         marca: base.marca,
+        roteiro: base.roteiro,
+        imagens_dir: base.imagens_dir,
+        voz: base.voz,
         status: 'ideia',
       }));
     }

@@ -41,6 +41,9 @@ export interface ContentItem {
   timezone: string | null;
   status: ContentStatus;
   marca: string | null;
+  roteiro: string | null;       // roteiro próprio colado (1 parágrafo = 1 cena)
+  imagens_dir: string | null;   // pasta com cena1.png … cenaN.png
+  voz: string | null;           // nome da voz (pasta em vozes/) — vazio = Kokoro
   video_path: string | null;
   error: string | null;
   created_at: number;
@@ -59,6 +62,9 @@ export interface ContentInput {
   timezone?: string | null;
   status?: ContentStatus;
   marca?: string | null;
+  roteiro?: string | null;
+  imagens_dir?: string | null;
+  voz?: string | null;
 }
 
 export type ContentPatch = Partial<Omit<ContentItem, 'id' | 'created_at' | 'updated_at'>>;
